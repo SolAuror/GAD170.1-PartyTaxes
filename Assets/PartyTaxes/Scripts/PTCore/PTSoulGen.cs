@@ -286,9 +286,10 @@ public class PTSoulGen : MonoBehaviour                                          
             soul.level = keptLevel;
             PTSoulPrefix prefix = TryApplyPrefix(soul);
             soul.Name = GenerateNameForType(typeData, prefix);
-            soul.dailywages = typeData.HasWageOverride
-                ? Random.Range(typeData.wageRange.x, typeData.wageRange.y + 1) * soul.level
-                : Random.Range(wageRange.x, wageRange.y + 1) * soul.level;
+            soul.baseWage = typeData.HasWageOverride
+                ? Random.Range(typeData.wageRange.x, typeData.wageRange.y + 1)
+                : Random.Range(wageRange.x, wageRange.y + 1);
+            soul.RecalculateWage();
         }
         else
         {
@@ -298,7 +299,8 @@ public class PTSoulGen : MonoBehaviour                                          
             soul.atrConstitution = Random.Range(1, 6);
             soul.atrSense        = Random.Range(1, 6);
             soul.atrLuck         = Random.Range(1, 6);
-            soul.dailywages      = Random.Range(wageRange.x, wageRange.y + 1) * soul.level;
+            soul.baseWage        = Random.Range(wageRange.x, wageRange.y + 1);
+            soul.RecalculateWage();
         }
 
         soul.FinishSetup();                                          // Derive HP, attack, defense from attributes

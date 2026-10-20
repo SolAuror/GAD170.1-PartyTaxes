@@ -1,6 +1,8 @@
-# Party Taxes v0.5
+# Party Taxes v0.6
 
 > *A game about paying your empl— ...friends, to adventure with you on a quest to slay pests for the queen.*
+
+You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-infested frontier. You can't swing a sword, so you hire people who can, and pay them from a purse the Queen expects back with interest. Survive 28 days, pay her auditor every week, and you're pardoned. Fail twice and you hang. Meanwhile your own party is skimming from you.
 
 ---------------------------------------------------------------------------------------
 
@@ -26,14 +28,14 @@
 
 ## Controls
 
-Every action has a clickable button in the **action bar** on the right of the screen (showing costs and what's available right now). The keyboard shortcuts below still work.
+Every action has a clickable button in the **action bar** on the right of the screen (showing costs and what's available right now). Hiring, payroll, audits and firing are mouse-only, from the **Tavern** and **Ledger** views. The keyboard shortcuts below still work.
 
 ### Town
 | Key | Action |
 ---------------------------------------------------------------------------------------
 | `Space` | Sleep (advance day) |
 | `E` | Go on an encounter |
-| `F` | Recruit a new party member |
+| `F` | Open the tavern's hiring board |
 | `Q` | Heal the party (cleric) |
 | `1` | Bless the party (cleric) |
 | `3` | Resurrect a fallen member *(unlocks day 7)* |
@@ -49,63 +51,103 @@ Every action has a clickable button in the **action bar** on the right of the sc
 
 ## Gameplay Systems
 
-### Party Management
-Recruit and manage a party of up to 4 adventurers. Each member has stats (HP, attack, defense), a level, and daily wages you must pay. New recruits are leveled up to match your party's average and join at full health. Members who die are remembered and can return through resurrection.
+### The Queen's Tribute (win condition)
+A run lasts **28 days**. At the end of every 7th day the Queen's auditor collects tribute: **200 / 350 / 500 / 700 gold**. It's taken *before* wages, so the Queen always gets paid first. Pay the fourth tribute on day 28 and you're **pardoned**.
 
-### Gold & Economy
-Gold is your core resource. You earn it by defeating enemies and through weekly survival bonuses. You spend it on wages, healing, blessings, recruitment, and resurrection. Party members may also steal gold while you sleep, with higher theft rates and amounts when wages go unpaid.
+Miss a tribute and you get a **strike**: the auditor seizes all your gold and drags your best-paid hero off as collateral. A second strike, or missing the final tribute, gets you **hanged**.
+
+### Payroll & Loyalty
+Every party member has **Loyalty** (0-100, visible in the Ledger) and wages due each night. In the Ledger you can tick or untick each member for tonight's payroll. At night they're paid in party order while the gold lasts.
+
+| Event | Loyalty |
+|---|---|
+| Paid on time | +5 |
+| Went unpaid | −15 |
+| A comrade died in combat | −10 |
+| Landed a killing blow | +3 |
+| Blessed by the cleric | +10 |
+| Watched someone fired without severance | −10 |
+| Wrongly accused in an audit | −15 |
+| Caught stealing: pay docked / forgiven | −10 / +15 |
+
+A member at **0 loyalty deserts** in the night with 10% of your gold. If the party's **average loyalty drops below 20**, or **two members fall below 10**, the party **mutinies** (game over). The log warns you when loyalty is getting dangerous.
+
+### Theft, the Morning Ledger & Audits
+Each member has a hidden **Greed**, hinted at by their description (*honest face*, *hard to read*, *eyes your purse*). Each night, every member may skim 5-12% of your gold. The chance rises with greed and falls with loyalty. Each morning you count the purse: *"expected 212 gold, counted 187"*. You're not told who did it.
+
+Once a day you can **audit** one member from the Ledger. If they've stolen since they were last caught, you'll probably catch them (harder for high-Sense characters). Then you choose to **dock their pay** (get the gold back), **forgive** them (more loyal, less greedy) or **fire** them. If they're innocent, they're furious (−15 loyalty).
+
+### Tavern (hiring board)
+Three candidates are on the board each morning, already at your party's average level, with their stats, wage and greed hint visible. Hiring costs a **signing fee of two days' wages** (×1.5 if anyone in the party is Cowardly).
+
+### Firing
+You can fire anyone from the Ledger (it asks you to confirm). Severance is one day's wage; if you can't afford it, the rest of the party loses 10 loyalty.
 
 ### Day / Night Cycle
-Each day you can perform town actions and trigger one encounter. Sleeping advances the day, pays wages, rests the party, rolls for theft, and resets all daily actions. A paid party recovers 25% of its max HP overnight; an unpaid party sleeps poorly and recovers nothing. Consecutive days without paying wages increase theft chance and inch towards mutiny.
+Each day you can perform town actions and trigger one encounter. Sleeping runs the night in order: **tribute (on tribute days) → payroll → desertions → mutiny check → rest → theft**, then a new morning with the ledger count and fresh tavern candidates. Paid members recover 25% of their max HP overnight; unpaid members recover nothing.
 
 ### Combat
-Encounters spawn a scaled group of enemies based on party size and days elapsed (see *Enemy Spawn Scaling*). Each party member attacks a random enemy, then surviving enemies counter-attack. XP from each kill is split evenly between all party members. Defeating all enemies awards gold loot and a commission bonus.
+Encounters spawn a scaled group of enemies based on party size and days elapsed (see *Enemy Spawn Scaling*). Each party member attacks a random enemy, then surviving enemies counter-attack. XP from each kill is split evenly between all party members. Winning pays loot plus a commission of **45 gold, +25 per week of the run**.
 
 ### Healing & Blessings
-The cleric can heal the party once per day for a small gold fee, restoring HP to each member. A full blessing costs significantly more but fully restores HP and removes the Cowardly debuff. Cowardly members receive 30% reduced healing from normal heals.
-
-### Recruitment
-Recruit a new party member for half your current total daily wages. Cowardly members inflate recruitment costs by 50%.
+The cleric can heal the party once per day for a small gold fee, restoring HP to each member. A full blessing costs significantly more but fully restores HP, removes the Cowardly debuff and gives +10 loyalty. Cowardly members receive 30% reduced healing from normal heals.
 
 ### Fleeing
 Escape from battle at the cost of 10% of your current gold. All surviving (non-resurrected) party members are branded as Cowardly. No loot or commission is earned.
 
 ### Resurrection
-Unlocked on day 7. Pay 100 gold plus the fallen member's daily wages to resurrect a random dead party member. Resurrected members come back as themselves (same attributes, level and XP) at full health, with a permanent 10% penalty to max HP, attack and defense, and are **Marked by Death** — they cannot become Cowardly.
+Unlocked on day 7. Pay 100 gold plus the fallen member's daily wages to resurrect a random dead party member. Resurrected members come back as themselves (same attributes, level, XP and employment record) at full health and 80 loyalty, with a permanent 10% penalty to max HP, attack and defense. They are **Marked by Death** and cannot become Cowardly.
 
 ### Leveling
-Members gain XP from kills. Each level up grants **+1 to the race's affinity attribute** (Human: Might, Dwarf: Constitution, Elf: Sense, Halfling: Luck), **+10 max HP**, and heals 30% of max HP, but also raises daily wages by 25%, so stronger parties cost more to maintain. Enemies that level up mid-fight (by killing party members) grow the same way.
+Members gain XP from kills; each level needs `50 × (level+1) × √level` XP. Each level up grants **+1 to the race's affinity attribute** (Human: Might, Dwarf: Constitution, Elf: Sense, Halfling: Luck), **+15 max HP**, and heals 30% of max HP. It also raises daily wages by **15% of their starting wage**, so stronger parties cost more to keep.
+
+### The Final Ledger
+When the run ends, win or lose, the books open: outcome, score, tribute paid, wages, theft and recoveries, and every hire's record (kills, loot, wages, what they stole, and how they left). The biggest thief is finally named.
+
+**Score** = tribute paid + gold kept + 25 per surviving member − 25 per death (+250 if pardoned).
 
 
 ## Game Over Conditions
 
 | Condition | Trigger |
 ---------------------------------------------------------------------------------------
-| **Mutiny** | Wages unpaid for 3 consecutive days |
-| **Total party wipe** | All party members killed in combat |
+| **Pardoned** *(win)* | Pay the day-28 tribute |
+| **Hanged** | Miss a second tribute, or miss the final one |
+| **Mutiny** | Average loyalty below 20, or two members below 10 |
+| **Abandoned** | Everyone has deserted, been fired or been seized |
+| **Slain** | All party members killed in combat |
 
 ---------------------------------------------------------------------------------------
 
 ## Script Architecture
 
-Contains a 5 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul, and a runtime-built action bar.
+Contains an 8 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul, employment records, and runtime-built UI.
 
-### `PTManager` — partial class, 5 files
+### `PTManager` — partial class, 8 files
 
 The central game controller. Owns all shared state (gold, party list, enemy list, day counter, UI references, balance constants) and is split into partial files for readability:
 
 | File | Responsibility |
 ---------------------------------------------------------------------------------------
-| `PTManager.cs` | Variables, constants, `GameState` (Town / Combat / GameOver), `Awake`/`Start`, input setup, shared helpers (`ChangeGold`, `UpdateUI`, `TriggerGameOver`, `SetSunIntensity`) |
-| `PTManager.Party.cs` | Party formation (`GetNextPartyMemberTransform`), `AddPartyMember`, `RemovePartyMember`, `LevelUpToPartyAverage`, `GetAveragePartyLevel` |
+| `PTManager.cs` | Variables, constants, `GameState` (Town / Combat / GameOver / Victory), `Awake`/`Start`, input setup, shared helpers (`ChangeGold`, `UpdateUI`, `TriggerGameOver`, `SetSunIntensity`) |
+| `PTManager.Party.cs` | Party formation (`GetNextPartyMemberTransform`), `SpawnRandomPartyMember`, `RemovePartyMember` (with a status and fate), `LevelUpTo`, `GetAveragePartyLevel` |
 | `PTManager.Combat.cs` | `TryEncounter` + `GetEncounterSize`, `TryAttack`, `TryRunAway`, turn phases |
-| `PTManager.Town.cs` | `TrySleep` + `RestParty`, `TryHeal`, `TryBless`, `TryRecruit`, `TryResurrect`, `RestartRun`, `CanPerformTownAction` |
-| `PTManager.Actions.cs` | Read-only costs and availability for the action bar (`HealCost`, `RecruitCost`, `FleeCost`, ...) |
+| `PTManager.Town.cs` | `TrySleep` (the night sequence) + `RestParty`, `TryHeal`, `TryBless`, `TryResurrect`, `RestartRun`, `CanPerformTownAction` |
+| `PTManager.Ledger.cs` | Employment, `RunPayroll`, loyalty events, `RunNightlyTheft`, `TryAudit` + `ResolveConfrontation`, `TryFire`, `ResolveDesertions`, `CheckMutiny`, run totals |
+| `PTManager.Tribute.cs` | Tribute schedule, `CollectTribute` (strikes, seizure, execution), `TriggerVictory`, `RunScore` |
+| `PTManager.Tavern.cs` | `RefreshTavern` (3 inactive candidate souls), `SigningFee`, `TryHire` |
+| `PTManager.Actions.cs` | Read-only costs and availability for the action bar (`HealCost`, `FleeCost`, ...) |
 
 Each input callback (`OnSleep`, `OnHeal`, ...) is a one-line wrapper around its `Try...` method, so keyboard and buttons share the same logic.
 
 ### `PTActionBar`
-Builds its own overlay canvas at runtime with a button for every action (no scene setup needed; turn it off with `buildActionBar` on PTManager). `PTManager.UpdateUI()` calls `Refresh()`, which re-reads labels, costs and which actions are allowed.
+Builds its own overlay canvas at runtime (no scene setup needed; turn it off with `buildActionBar` on PTManager). Views: **Main** (town actions), **Tavern** (hiring board), **Ledger** (payroll toggles, audits, firing). A caught thief forces the confrontation choice. `PTManager.UpdateUI()` calls `Refresh()`, which re-reads every label, cost and availability. Opens the Final Ledger when the run ends.
+
+### `PTFinalLedgerPanel` / `PTUIFactory`
+The end-of-run books (outcome, score, totals, per-hire table, biggest thief). `PTUIFactory` holds the shared runtime UI helpers (canvas, panel, row, label, button) so all generated UI looks the same.
+
+### `PTEmployeeRecord` (Data Class)
+A party member's employment file: loyalty, hidden greed, payroll toggle, nights unpaid, theft (total and unrecovered), kills, loot, wages received, deaths, and status/fate. Held on `PTSoul.employment` (runtime only) and in `PTManager.runLedger`, so the books keep everyone ever hired. It travels with `DeadCharacterData`, so a resurrected hero keeps their history.
 
 ### `PTSoul`
 Represents a single character — party member or enemy. Owns stats (HP, attack, defense, level, XP, wages) and status flags (`isCowardly`, `markedByDeath`, `isAdversary`). Handles its own damage, healing, blessing, XP, and level-up logic, and drives its own UI elements (name, health bar, XP bar). `PTManager` holds lists of `PTSoul` instances and calls into them to run gameplay.
@@ -144,7 +186,7 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 
 **Character Growth:**
 - `GainXP(int xpAmount)` — Adds experience points, automatically triggers level-up if threshold reached
-- `LevelUp()` — Increases level, +1 to the affinity attribute, +10 max HP, heals 30%, raises wages by 25%
+- `LevelUp()` — Increases level, +1 to the affinity attribute, +15 max HP, heals 30%, raises wages by 15% of base wage
 - `ChangeAttribute(SoulAttribute attribute, int amount)` — Increases/decreases specific stat, recalculates derived combat values
 - `RecalculateStats()` — Converts 5 base attributes (plus level HP bonus and stat multiplier) into HP, attack, defense, crit chance, crit multiplier
 
@@ -170,15 +212,15 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 
 ---
 
-### **PTManager.Party.cs** — Party Formation & Recruitment
+### **PTManager.Party.cs** — Party Formation
 
 **Formation System:**
 - `GetNextPartyMemberTransform(out Quaternion rotation)` — Repositions all party members in neat horizontal line, returns next available slot position
 
 **Member Management:**
-- `SpawnRandomPartyMember()` — Creates new character with random stats/race, adds to party, auto-levels to match team
-- `RemovePartyMember(PTSoul member)` — Removes from party list, saves data for resurrection, destroys game object
-- `LevelUpToPartyAverage(PTSoul newMember)` — New recruits instantly level up to match party's average level, then heal to full
+- `SpawnRandomPartyMember()` — Creates a starting party member with random stats/race and puts them on the payroll
+- `RemovePartyMember(PTSoul member, EmploymentStatus status, string fate)` — Closes their employment file, saves the slain for resurrection, destroys the game object
+- `LevelUpTo(PTSoul soul, int level, bool fullHeal)` — Levels a recruit or tavern candidate up to the party's average
 
 **Utility:**
 - `GetAveragePartyLevel()` — Calculates team power by averaging all member levels
@@ -188,17 +230,29 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 ### **PTManager.Town.cs** — Town Activities
 
 **Helper:**
-- `CanPerformTownAction()` — Safety check that prevents town actions during combat
+- `CanPerformTownAction()` — Safety check that prevents town actions during combat or after the run ends
 
 **Daily Cycle:**
-- `TrySleep()` — **(Spacebar)** Advances to next day, pays wages, rests the party (if paid), checks for theft, awards weekly bonuses, resets daily action flags
+- `TrySleep()` — **(Spacebar)** Runs the night: tribute (on tribute days) → payroll → desertions → mutiny check → rest → theft → new morning (ledger count, fresh tavern, reset daily actions)
 
 **Services:**
 - `TryHeal()` — **(Q key)** Costs 10 gold per member, heals everyone for 50 HP, once per day
-- `TryBless()` — **(1 key)** Costs 100 gold per member, fully heals + removes coward status, once per day
-- `TryRecruit()` — **(F key)** Costs half of daily wages (more with cowards), spawns random character
+- `TryBless()` — **(1 key)** Costs 100 gold per member, fully heals, removes coward status, +10 loyalty, once per day
 - `TryResurrect()` — **(3 key)** Unlocks day 7+, costs 100 gold + wages, revives a random dead character as themselves at 90% stats with "Marked by Death"
 - `RestartRun()` — **(Escape key)** Reloads entire scene from scratch
+- `OnRecruit` — **(F key)** Opens the tavern view (or hires the cheapest affordable candidate when there's no action bar)
+
+---
+
+### **PTManager.Ledger.cs / Tribute.cs / Tavern.cs** — The Accountant's Tools
+
+- `RunPayroll()` — Pays ticked members in order while gold lasts; ±loyalty; records wages
+- `ResolveDesertions()` / `CheckMutiny()` — Members at 0 loyalty leave with 10% of the gold; low average loyalty ends the run
+- `RunNightlyTheft()` / `LogMorningLedger()` — Per-member skimming, then the morning count shows what went missing
+- `TryAudit(member)` → `ResolveConfrontation(DockPay | Forgive | Fire)` — Once a day; innocent suspects resent it
+- `TryFire(member)` / `TogglePay(member)` — Firing with severance, payroll ticks
+- `CollectTribute()` — Pays the Queen or takes a strike (seizure, then the noose); `TriggerVictory()` on day 28
+- `RefreshTavern()` / `SigningFee(candidate)` / `TryHire(index)` — The hiring board
 
 ---
 
@@ -301,8 +355,9 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 
 **Daily Loop:**
 ```
-Wake Up → See Wages → Find Enemies (E) → Fight → Win → Get Gold → 
-Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space): pay wages, rest → Repeat
+Morning ledger (anything missing?) → Audit a suspect? → Hire at the Tavern / Heal / Bless →
+Hunt (E) → Fight → Loot + commission → Set payroll in the Ledger →
+Sleep (Space): tribute (every 7th day) → payroll → desertions/mutiny → rest → theft → Repeat until day 28
 ```
 
 **Combat Turn Order:**
@@ -313,7 +368,7 @@ Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space): pay wages, rest → Repeat
 5. New round starts, repeat until victory/defeat
 
 **Stat Derivation Formulas:**
-- **Max HP** = (60 + (Constitution × 10) + 10 per level gained) × stat multiplier
+- **Max HP** = (60 + (Constitution × 10) + 15 per level gained) × stat multiplier
 - **Attack** = Might × 4 × stat multiplier
 - **Defense** = (Constitution × 2, +3 for party members) × stat multiplier
 - **Stat multiplier** = 1.0 normally, 0.9 for souls Marked by Death
@@ -323,36 +378,39 @@ Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space): pay wages, rest → Repeat
 
 **Enemy Spawn Scaling (`GetEncounterSize`):**
 - **Grace days (1-3):** exactly one enemy per party member
-- **Base Formula:** partyCount to ceil(partyCount × 1.5), inclusive
-- **Daily Escalation:** from day 7, +1 to the maximum every 3 days (day 7-9: +1, day 10-12: +2, ...)
-- **Example:** 4-member party on day 4 = 4-6 enemies; day 10 = 4-8 enemies
+- **Base Formula:** partyCount to ceil(partyCount × 1.25), inclusive
+- **Weekly Escalation:** from day 8, +1 to the maximum each week (day 8-14: +1, day 15-21: +2, ...)
+- **Example:** 4-member party on day 4 = 4-5 enemies; day 10 = 4-6 enemies; day 22 = 4-8 enemies
 
 ---------------------------------------------------------------------------------------
 
-## Balance Constants (PTManager.cs)
+## Balance Constants
+
+**PTManager.cs**
 
 | Constant | Value | Description |
 ---------------------------------------------------------------------------------------
-| `DAYS_UNTIL_MUTINY` | 3 | Days without paying wages before game over |
 | `BASE_HEAL_AMOUNT` | 50 | HP restored per party member (base healing) |
 | `HEAL_COST_PER_MEMBER` | 10 | Gold cost per member for healing service |
 | `BLESS_COST_PER_MEMBER` | 100 | Gold cost per member for blessing service |
 | `BASE_RESURRECTION_COST` | 100 | Base gold cost for resurrection (+ wages) |
-| `THEFT_CHANCE_BROKE` | 0.25 | 25% theft chance when wages unpaid |
-| `THEFT_CHANCE_NORMAL` | 0.1 | 10% theft chance when wages paid |
-| `THEFT_PERCENT_BROKE` | 0.2 | 20% of gold stolen when broke |
-| `THEFT_PERCENT_NORMAL` | 0.1 | 10% of gold stolen normally |
 | `FLEE_COST_PERCENT` | 0.1 | 10% of gold dropped to attempt fleeing |
 | `RESURRECTION_UNLOCK_DAY` | 7 | Day when resurrection becomes available |
-| `WEEKLY_BONUS_INTERVAL` | 7 | Days between weekly survival bonuses |
-| `REST_HEAL_PERCENT` | 0.25 | Share of max HP recovered overnight when wages are paid |
+| `REST_HEAL_PERCENT` | 0.25 | Share of max HP recovered overnight by paid members |
 | `ENCOUNTER_GRACE_DAYS` | 3 | Days with one enemy per party member |
-| `ENCOUNTER_MAX_MULTIPLIER` | 1.5 | Max enemies = party size × this (rounded up), before escalation |
-| `ESCALATION_START_DAY` / `ESCALATION_EVERY_DAYS` | 7 / 3 | +1 max enemy every 3 days from day 7 |
+| `ENCOUNTER_MAX_MULTIPLIER` | 1.25 | Max enemies = party size × this (rounded up), before escalation |
+| `ESCALATION_START_DAY` / `ESCALATION_EVERY_DAYS` | 8 / 7 | +1 max enemy each week from day 8 |
+| `commission` *(inspector)* / `COMMISSION_PER_WEEK` | 45 / 25 | Victory commission, growing each week |
 
-PTSoul.cs: `PARTY_DEFENSE_BONUS` 3, `HP_PER_LEVEL` 10, `LEVEL_UP_HEAL_PERCENT` 0.3, `WAGE_GROWTH_PER_LEVEL` 1.25.
+**PTManager.Tribute.cs:** `RUN_LENGTH_DAYS` 28, `TRIBUTE_SCHEDULE` 200/350/500/700, `STRIKES_TO_EXECUTION` 2, score: +250 pardon, ±25 per survivor/death.
 
-These values were tuned with the balance model in `Tools/BalanceSim` — keep it in sync when you change them.
+**PTManager.Tavern.cs:** `TAVERN_CANDIDATES` 3, `SIGNING_FEE_DAYS` 2, `COWARD_FEE_MULTIPLIER` 1.5.
+
+**PTManager.Ledger.cs:** loyalty start 60 (80 resurrected), the loyalty events in the table above, greed 0.1-0.9, theft chance `greed × (1 − loyalty/150) × 0.7`, theft cut 5-12%, desertion cut 10%, mutiny below 20 average or two below 10, audit catch chance `0.8 − 0.05 × (Sense − 3)` clamped to 40-90%.
+
+**PTSoul.cs:** `PARTY_DEFENSE_BONUS` 3, `HP_PER_LEVEL` 15, `LEVEL_UP_HEAL_PERCENT` 0.3, `WAGE_RAISE_PER_LEVEL` 0.15 (of base wage), XP to next level `50 × (level+1) × √level`.
+
+These values were tuned with the balance model in `Tools/BalanceSim`. Keep it in sync when you change them.
 
 ---------------------------------------------------------------------------------------
 
@@ -384,11 +442,11 @@ These values were tuned with the balance model in `Tools/BalanceSim` — keep it
 - **Formation Recentering:** When adding party members, entire formation recalculates to keep the group centered on spawn point
 - **Prefix Rarity:** 35% chance to apply prefix ensures they feel special without being overwhelming
 - **Enemy Level Capping:** Enemies never spawn above party's average level, preventing impossible encounters; the cap is applied before per-level attribute bonuses
-- **Wage Inflation:** Each level-up increases wages by 25%, creating escalating economic pressure
+- **Wage Inflation:** Each level-up adds 15% of the starting wage, so a strong party costs more to keep
 - **Debug Mode Toggle:** Set `debugMode = true` in PTManager inspector to see AI decisions and spawn calculations in console, and to use `4` to grant XP
 - **Escape Individual Rolls:** Each party member independently rolls escape based on their agility vs average enemy agility (50% base ± difference)
 - **Colorization Regex:** Adventure log uses regex patterns to auto-detect and colorize gold amounts, HP, enemy names, etc.
-- **Theft Escalation:** Being broke increases both theft chance (10%→25%) and the share stolen (10%→20%) to create pressure
+- **Theft:** Per member, per night: `greed × (1 − loyalty/150) × 0.7`. Unpaid members lose loyalty, so stiffing people makes theft worse
 - **Initialization Guard:** `PTSoul.Start()` only sets up souls that weren't already set up by a spawner (`FinishSetup()`), so generated and resurrected data survives the first frame
 - **UI Context Awareness:** Control display dynamically hides unavailable actions (e.g., Heal button disappears after daily use)
 - **Prefab Fallback Chain:** Resurrection tries original prefab → first party prefab → logs warning if all fail
@@ -396,6 +454,25 @@ These values were tuned with the balance model in `Tools/BalanceSim` — keep it
 ---------------------------------------------------------------------------------------
 
 ## ⚖️ Recent Balance Changes
+
+### v0.6 - Phase 1: The Ledger
+Added the Queen's tribute and 28-day win, per-member payroll and loyalty, greed-driven theft with morning ledger counts and audits, firing, desertion and mutiny, the tavern hiring board, and the Final Ledger.
+
+Balance model (`python3 Tools/BalanceSim/party_taxes_sim.py`, 2,000 runs per scripted player):
+
+| Player | Pardoned | Economic loss (hanged / mutiny / abandoned) | Slain |
+|---|---|---|---|
+| *Accountant*: full party, banks for tribute, audits after thefts, rests when hurt | 26% | 54% | 20% |
+| *Naive*: spends freely, never audits | 14% | 78% | 8% |
+| *Hoarder*: never hires beyond two | 1% | 0% | 99% |
+
+**Why the economy was re-tuned:** with 25% compounding raises and an XP curve that sped up late, a full party cost 419g/day against 224g income by day 28, so no tribute schedule was winnable. Now:
+- Raises are linear: +15% of the starting wage per level
+- XP to level is `50 × (level+1) × √level`
+- Commission grows +25g per week
+- +15 max HP per level
+- Enemy escalation is +1 per week from day 8; max enemies is party × 1.25
+- The weekly survival bonus is replaced by the tribute
 
 ### v0.5 - Phase 0: Stabilise
 Balance model (`python3 Tools/BalanceSim/party_taxes_sim.py`, 2,000 runs per strategy):

@@ -29,11 +29,11 @@ static class Program
         s.currentHP = 50;
         s.GainXP(100);
         Check(s.level == 2 && s.atrMight == 4, $"level up: +1 affinity (Might {s.atrMight}, level {s.level})");
-        Check(s.maxHP == 110, $"level up: +10 max HP (got {s.maxHP})");
+        Check(s.maxHP == 115, $"level up: +15 max HP (got {s.maxHP})");
         Check(s.attack == 16, $"level up: attack follows Might (got {s.attack})");
         Check(s.defense == 11, $"level up keeps the +3 defense bonus (got {s.defense})");
-        Check(s.currentHP == 50 + 33, $"level up heals 30% of max HP (got {s.currentHP})");
-        Check(s.dailywages == 25, $"level up raises wages 25% (got {s.dailywages})");
+        Check(s.currentHP == 50 + 34, $"level up heals 30% of max HP (got {s.currentHP})");
+        Check(s.dailywages == 23, $"level up raises wages by 15% of base wage (got {s.dailywages})");
         Check(s.currentXp == 0, $"overflow XP carried correctly (got {s.currentXp})");
 
         // 3. Levelling a fresh recruit directly never leaves negative XP
@@ -57,7 +57,7 @@ static class Program
         snapshot.ApplyTo(body);
         body.Start();                                                              // runs a frame later in Unity
         Check(body.atrMight == s.atrMight && body.atrConstitution == s.atrConstitution && body.level == s.level, "resurrected soul keeps its own attributes and level");
-        Check(body.maxHP == (int)Math.Round(s.maxHP * 0.9, MidpointRounding.ToEven), $"resurrected max HP is 90% (got {body.maxHP} from {s.maxHP})");
+        Check(body.maxHP == (int)Math.Round(s.maxHP * 0.9f, MidpointRounding.ToEven), $"resurrected max HP is 90% (got {body.maxHP} from {s.maxHP})");
         Check(body.currentHP == body.maxHP && body.markedByDeath && !body.isCowardly && body.currentXp == s.currentXp && s.currentXp == 37, "resurrected at full HP, Marked by Death, fearless, XP kept");
         int penalisedAttack = body.attack;
         body.GainXP(1000);
@@ -82,17 +82,141 @@ static class Program
         var size = typeof(PTManager).GetMethod("GetEncounterSize", BindingFlags.Instance | BindingFlags.NonPublic);
         (int min, int max) Range(int day) { mgr.daysElapsed = day; int lo = 99, hi = 0; for (int i = 0; i < 2000; i++) { int n = (int)size.Invoke(mgr, null); lo = Math.Min(lo, n); hi = Math.Max(hi, n); } return (lo, hi); }
         Check(Range(1) == (4, 4) && Range(3) == (4, 4), "grace days: one enemy per party member");
-        Check(Range(4) == (4, 6), $"day 4, party of 4: 4-6 enemies (got {Range(4)})");
-        Check(Range(7) == (4, 7) && Range(10) == (4, 8), $"escalation +1 every 3 days from day 7 (got {Range(7)}, {Range(10)})");
+        Check(Range(4) == (4, 5), $"day 4, party of 4: 4-5 enemies (got {Range(4)})");
+        Check(Range(7) == (4, 5) && Range(8) == (4, 6) && Range(15) == (4, 7), $"escalation +1 each week from day 8 (got {Range(7)}, {Range(8)}, {Range(15)})");
 
         // 8. State starts in town; costs exposed for the action bar
         Check(mgr.State == PTManager.GameState.Town, "game starts in Town state");
-        mgr.partyMembers[0].isCowardly = true;
-        int baseCost = mgr.TotalDailyWages / 2;
-        Check(mgr.RecruitCost == (int)Math.Round(baseCost * 1.5), $"recruit cost x1.5 with a coward (got {mgr.RecruitCost} from {baseCost})");
         Check(mgr.HealCost == 40 && mgr.BlessCost == 400, "heal/bless costs scale with party size");
+
+        Phase1Tests();
 
         Console.WriteLine(failures == 0 ? "\nALL TESTS PASSED" : $"\n{failures} FAILURE(S)");
         return failures == 0 ? 0 : 1;
+    }
+
+    // ── Phase 1: the Ledger ─────────────────────────────────────────────
+    static object Call(PTManager m, string method, params object[] args)
+    {
+        foreach (var mi in typeof(PTManager).GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
+            if (mi.Name == method && mi.GetParameters().Length == args.Length) return mi.Invoke(m, args);
+        throw new Exception("no method " + method);
+    }
+
+    static PTManager NewRun(params int[] wages)
+    {
+        var m = new PTManager { daysElapsed = 1, gold = 0 };
+        foreach (int w in wages)
+        {
+            var soul = MakeSoul(3, 2, 3, 3, 2, false, SoulAttribute.Might, w);
+            soul.Name = "Hero" + m.partyMembers.Count;
+            m.partyMembers.Add(soul);
+            Call(m, "Employ", soul, 60);
+        }
+        return m;
+    }
+
+    static void Phase1Tests()
+    {
+        Console.WriteLine("\n-- Phase 1 --");
+        Check(PTSoul.XpToNextLevel(1) == 100 && PTSoul.XpToNextLevel(2) == 212 && PTSoul.XpToNextLevel(4) == 500,
+              $"XP curve 50*(L+1)*sqrt(L) (got {PTSoul.XpToNextLevel(1)}, {PTSoul.XpToNextLevel(2)}, {PTSoul.XpToNextLevel(4)})");
+        var w = MakeSoul(2, 2, 2, 2, 2, false, SoulAttribute.Might, 20);
+        w.LevelUp(); w.LevelUp();
+        Check(w.dailywages == 26 && w.baseWage == 20, $"wages rise linearly: 20 -> 26 at level 3 (got {w.dailywages})");
+
+        // Payroll: pay whoever is ticked while the gold lasts
+        var m = NewRun(10, 15, 20);
+        m.gold = 30;
+        m.partyMembers[1].employment.payTonight = false;
+        var paid = (HashSet<PTSoul>)Call(m, "RunPayroll");
+        Check(paid.Count == 2 && m.gold == 0 && m.UnpaidLastNight == 1, $"payroll pays ticked members it can afford (paid {paid.Count}, gold {m.gold})");
+        Check(m.partyMembers[0].employment.loyalty == 65 && m.partyMembers[1].employment.loyalty == 45, "paid +5 loyalty, unpaid -15");
+        Check(m.TotalWagesPaid == 30 && m.partyMembers[2].employment.wagesReceived == 20, "wages recorded in the books");
+
+        // Desertion and mutiny
+        m = NewRun(10, 10, 10); m.gold = 100;
+        m.partyMembers[0].employment.loyalty = 0;
+        var deserter = m.partyMembers[0].employment;
+        Call(m, "ResolveDesertions");
+        Check(m.partyMembers.Count == 2 && deserter.status == EmploymentStatus.Deserted && m.gold == 90, $"a member at 0 loyalty deserts with 10% of the gold (gold {m.gold})");
+        Check(!(bool)Call(m, "CheckMutiny") && m.State == PTManager.GameState.Town, "no mutiny while loyalty is healthy");
+        foreach (var p in m.partyMembers) p.employment.loyalty = 15;
+        Check((bool)Call(m, "CheckMutiny") && m.State == PTManager.GameState.GameOver && m.RunOutcome == "Mutiny", "average loyalty below 20 means mutiny");
+
+        // Theft is tracked per member and shows up as missing gold
+        m = NewRun(10, 10); m.partyMembers[0].employment.greed = 0.9f; m.partyMembers[0].employment.loyalty = 0;
+        m.partyMembers[1].employment.greed = 0f;
+        int nightsWithTheft = 0;
+        for (int i = 0; i < 200; i++) { m.gold = 1000; Call(m, "RunNightlyTheft"); if (m.LastNightMissing > 0) nightsWithTheft++; }
+        var thiefJob = m.partyMembers[0].employment;
+        Check(nightsWithTheft > 90 && nightsWithTheft < 160, $"greedy, disloyal member steals ~63% of nights (got {nightsWithTheft}/200)");
+        Check(m.partyMembers[1].employment.stolenTotal == 0 && thiefJob.stolenTotal == m.TotalStolen && thiefJob.stolenUnrecovered == thiefJob.stolenTotal, "theft is attributed to the thief only");
+
+        // Audits: innocent members resent it; caught thieves can be docked
+        m.gold = 0;
+        var innocent = m.partyMembers[1];
+        m.TryAudit(innocent);
+        Check(innocent.employment.loyalty == 45 && m.hasAudited && m.PendingConfrontation == null, "auditing an innocent costs 15 loyalty");
+        m.TryAudit(m.partyMembers[0]);
+        Check(m.PendingConfrontation == null, "only one audit per day");
+        int stolen = thiefJob.stolenUnrecovered, tries = 0;
+        while (m.PendingConfrontation == null && tries++ < 50) { m.hasAudited = false; m.TryAudit(m.partyMembers[0]); }
+        Check(m.PendingConfrontation == m.partyMembers[0], "a thief gets caught by an audit");
+        m.ResolveConfrontation(PTManager.Confrontation.DockPay);
+        Check(m.gold == stolen && thiefJob.stolenUnrecovered == 0 && m.TotalRecovered == stolen && thiefJob.loyalty == 0, $"docking pay recovers {stolen}g");
+
+        // Firing: severance if you can afford it, resentment if you can't
+        m = NewRun(10, 12, 14); m.gold = 50;
+        var fired = m.partyMembers[1];
+        m.TryFire(fired);
+        Check(m.gold == 38 && m.partyMembers.Count == 2 && fired.employment.status == EmploymentStatus.Fired && m.partyMembers[0].employment.loyalty == 60, "firing pays one day's severance");
+        m.gold = 0; m.TryFire(m.partyMembers[1]);
+        Check(m.partyMembers[0].employment.loyalty == 50, "firing without severance costs the others 10 loyalty");
+
+        // Tribute schedule, strikes, seizure, execution and victory
+        m = NewRun(10, 30);
+        int[] dueDay = new int[29], dueAmount = new int[29];
+        foreach (int d in new[] { 1, 6, 7, 8, 14, 15, 28 }) { m.daysElapsed = d; dueDay[d] = m.NextTributeDay; dueAmount[d] = m.NextTributeAmount; }
+        Check(dueDay[1] == 7 && dueDay[7] == 7 && dueDay[8] == 14 && dueDay[28] == 28, "tribute falls due every 7th day");
+        Check(dueAmount[1] == 200 && dueAmount[8] == 350 && dueAmount[15] == 500 && dueAmount[28] == 700, "tribute schedule 200/350/500/700");
+        m.daysElapsed = 7; m.gold = 250;
+        Check((bool)Call(m, "CollectTribute") && m.gold == 50 && m.TotalTributePaid == 200, "paying tribute");
+        m.daysElapsed = 14; m.gold = 100;
+        var bestPaid = m.partyMembers[1];
+        Check((bool)Call(m, "CollectTribute") && m.TributeStrikes == 1 && m.gold == 0 && bestPaid.employment.status == EmploymentStatus.Seized && m.partyMembers.Count == 1,
+              "first missed tribute: gold and best-paid hero seized");
+        m.daysElapsed = 21;
+        Check(!(bool)Call(m, "CollectTribute") && m.State == PTManager.GameState.GameOver && m.RunOutcome == "Hanged", "second missed tribute: hanged");
+        m = NewRun(10); m.daysElapsed = 28; m.gold = 800;
+        Check(!(bool)Call(m, "CollectTribute") && m.State == PTManager.GameState.Victory && m.RunOutcome == "Pardoned" && m.IsRunOver, "final tribute paid: pardoned");
+        Check(m.RunScore == 700 + 100 + 25 + 250, $"score = tribute + gold + survivors + pardon bonus (got {m.RunScore})");
+        m.TryFire(m.partyMembers[0]);
+        Check(m.partyMembers.Count == 1, "no actions once the run is over");
+
+        // Signing fees
+        m = NewRun(10);
+        var cand = MakeSoul(2, 2, 2, 2, 2, false, SoulAttribute.Might, 12);
+        Check(m.SigningFee(cand) == 24, "signing fee is two days' wages");
+        m.partyMembers[0].isCowardly = true;
+        Check(m.SigningFee(cand) == 36, "cowards in the party make hiring 50% pricier");
+
+        // A full night: tribute first, then payroll, rest, theft and a new morning
+        m = NewRun(10, 10);
+        foreach (var p in m.partyMembers) { p.employment.greed = 0f; p.currentHP = 50; }
+        m.daysElapsed = 7; m.gold = 215;
+        m.TrySleep();
+        Check(m.daysElapsed == 8 && m.TotalTributePaid == 200 && m.gold == 5 && m.UnpaidLastNight == 1, $"night: tribute paid before wages, one member left unpaid (gold {m.gold}, unpaid {m.UnpaidLastNight})");
+        Check(m.partyMembers[0].currentHP > 50 && m.partyMembers[1].currentHP == 50, "only paid members rest overnight");
+        m.daysElapsed = 9; m.partyMembers[0].employment.stolenUnrecovered = 5; m.partyMembers[0].atrSense = 1;
+        for (int i = 0; i < 50 && m.PendingConfrontation == null; i++) { m.hasAudited = false; m.TryAudit(m.partyMembers[0]); }
+        m.TrySleep();
+        Check(m.daysElapsed == 9, "can't sleep with a caught thief waiting for a decision");
+
+        // Death closes the file and keeps it for resurrection
+        m = NewRun(10, 10);
+        var dead = m.partyMembers[0];
+        Call(m, "RemovePartyMember", dead, EmploymentStatus.Slain, "Slain by test");
+        Check(dead.employment.timesDied == 1 && m.FallenCount == 1 && m.runLedger.Count == 2, "slain members stay in the run ledger and can be raised");
     }
 }

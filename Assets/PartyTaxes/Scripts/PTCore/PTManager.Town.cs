@@ -10,7 +10,7 @@ public partial class PTManager
 {
     bool CanPerformTownAction(string combatMessage = "You must return to town first!")                   //helper to check common town action preconditions
     {
-        if (State == GameState.GameOver) return false;                                                   //block if game over
+        if (IsRunOver) return false;                                                                     //block if the run is over
         if (State == GameState.Combat)                                                                   //block if in combat
         {
             PTAdventureLog.Log(combatMessage);
@@ -24,58 +24,40 @@ public partial class PTManager
         if (context.performed) TrySleep();
     }
 
-    public void TrySleep()                                                                               //Sleep through the night: pay wages, rest, roll for theft and start a new day
+    public void TrySleep()                                                                               //End the day: the Queen's tribute, payroll, desertions, mutiny, rest and theft, then a new morning
     {
-        if (State == GameState.GameOver) return;                                                         //block input after game over
+        if (IsRunOver) return;                                                                           //block input after the run ends
         if (State == GameState.Combat)                                                                   //no sleeping in the middle of a battle
         {
             PTAdventureLog.Log("You cannot sleep during a battle!");                                     //log cannot sleep message
             return;
         }
+        if (PendingConfrontation != null)                                                                //a caught thief needs a decision first
+        {
+            PTAdventureLog.Log("Decide what to do about " + PendingConfrontation.Name + " before you turn in.");
+            return;
+        }
+
+        PTAdventureLog.Log(sleepMsgs[Random.Range(0, sleepMsgs.Length)]);                                //log sleeping message
+
+        if (IsTributeDay && !CollectTribute()) return;                                                   //the Queen gets paid first; stop here if the run ended
+
+        HashSet<PTSoul> paid = RunPayroll();                                                             //pay everyone ticked for payroll while the gold lasts
+        ResolveDesertions();                                                                             //members with no loyalty left walk out
+        if (partyMembers.Count == 0)                                                                     //nobody left to protect you
+        {
+            TriggerGameOver("With no one left to protect you, the goblins find you before the Queen does.", "Abandoned");
+            return;
+        }
+        if (CheckMutiny()) return;                                                                       //game over if the party turns on you
+
+        RestParty(paid);                                                                                 //paid members rest and recover health, unpaid ones don't
+        int expectedGold = gold;
+        RunNightlyTheft();                                                                               //sticky fingers in the night
 
         daysElapsed++;                                                                                   //increment the day
-        PTAdventureLog.Log(sleepMsgs[Random.Range(0, sleepMsgs.Length)] + " Day: " + daysElapsed);       //log sleeping message
-        totalWages = CalculateTotalDailyWages();                                                         //calculate total daily wages from all party members
-
-        bool wagesPaid = gold >= totalWages;                                                             //check if the party can afford to pay wages
-        if (wagesPaid)
-        {
-            ChangeGold(-totalWages);                                                                     //subtract total daily wages from gold
-            daysWithoutGold = 0;                                                                         //reset broke counter since wages were paid
-        }
-        else                                                                                             //if the party cannot afford wages
-        {
-            daysWithoutGold++;                                                                           //increment the broke day counter
-            int daysRemaining = DAYS_UNTIL_MUTINY - daysWithoutGold;                                     //calculate days remaining before game over
-            if (daysWithoutGold >= DAYS_UNTIL_MUTINY)                                                    //game over after 3 consecutive days without gold
-            {
-                TriggerGameOver("The party has gone unpaid for 3 days and murdered you in your sleep!");
-                return;                                                                                  //exit early
-            }
-            PTAdventureLog.Log("WARNING: The party cannot be paid! They are very unhappy about this. " + daysRemaining + " day(s) until mutiny!"); //log warning message
-        }
-
-        RestParty(wagesPaid);                                                                            //paid members rest and recover health, unpaid ones don't
-
-        // Theft chance — higher odds and larger cut during the broke period
-        float theftChance  = daysWithoutGold > 0 ? THEFT_CHANCE_BROKE : THEFT_CHANCE_NORMAL;             //25% chance for party theft when broke, 10% otherwise
-        float theftPercent = daysWithoutGold > 0 ? THEFT_PERCENT_BROKE : THEFT_PERCENT_NORMAL;           //they steal 20% when you are broke, 10% otherwise
-        if (Random.value < theftChance && gold > 0)                                                      //roll for theft, only if there is gold to steal
-        {
-            int stolen = Mathf.Max(1, Mathf.FloorToInt(gold * theftPercent));                            //calculate amount stolen, minimum 1
-            ChangeGold(-stolen);                                                                         //deduct stolen gold
-            string theftMsg = daysWithoutGold > 0
-                ? "The party is getting desperate... " + stolen + " gold has gone missing!"              //broke period message
-                : "The party has stolen from you. " + stolen + " gold is missing!";                      //normal theft message
-            PTAdventureLog.Log(theftMsg);                                                                //log theft message
-        }
-
-        if (daysElapsed % WEEKLY_BONUS_INTERVAL == 0)                                                    //every seventh day, award the weekly bonus commission
-        {
-            ChangeGold(weeklyBonusCommission);                                                           //add weekly bonus commission
-            PTAdventureLog.Log("A week has passed! The party earns a weekly bonus of " +
-                               weeklyBonusCommission + " gold!");                                        //log weekly bonus message
-        }
+        PTAdventureLog.Log("Day " + daysElapsed + " dawns.");
+        LogMorningLedger(expectedGold);
 
         if (daysElapsed == RESURRECTION_UNLOCK_DAY)                                                      //on the 7th day, unlock resurrection
         {
@@ -86,14 +68,16 @@ public partial class PTManager
         hasFought = false;                                                                               //reset hasFought for the new day
         hasHealed = false;                                                                               //reset hasHealed for the new day
         hasBeenBlessed = false;                                                                          //reset hasBeenBlessed for the new day
+        hasAudited = false;                                                                              //one audit per day
         UnhideAllFledMembers();                                                                          //unhide any party members who fled during combat
+        RefreshTavern();                                                                                 //new faces at the tavern
 
         dailyMsg = "Heil, " + partyName +                                                                //greet the party,
                   "! You have " + gold +                                                                 //display the party gold
                   " gold and " + partyMembers.Count +                                                    //display the number of party members
-                  " party members. Daily Wages are " + totalWages +                                      //display the total daily wages 
-                  ". Your party may Heal if the cleric is available, look for new members or head out on a hunt." + //display instructions for fighting enemies
-                  " You may also sleep through this night.";                                             //display instructions for sleeping
+                  " party members. Daily Wages are " + CalculateTotalDailyWages() + ". " +               //display the total daily wages
+                  (IsTributeDay ? "The Queen's auditor is in town: " + NextTributeAmount + " gold is due TONIGHT." //tribute reminder
+                                : NextTributeAmount + " gold is due to the Queen in " + DaysUntilTribute + " day(s).");
         PTAdventureLog.Log(dailyMsg);                                                                    //log the daily message
         UpdateUI();                                                                                      //update UI after sleeping
 
@@ -103,17 +87,12 @@ public partial class PTManager
         }
     }
 
-    void RestParty(bool wagesPaid)                                                                       //overnight recovery: a paid party rests and recovers a share of max HP
+    void RestParty(HashSet<PTSoul> paidMembers)                                                          //overnight recovery: paid members rest and recover a share of max HP
     {
-        if (!wagesPaid)
-        {
-            PTAdventureLog.Log("Unpaid and resentful, the party sleeps poorly and recovers no health.");
-            return;
-        }
-
         int totalRested = 0;
         foreach (PTSoul member in partyMembers)
         {
+            if (!paidMembers.Contains(member)) continue;                                                 //unpaid and resentful, they sleep poorly
             totalRested += member.RestoreHP(Mathf.RoundToInt(member.maxHP * REST_HEAL_PERCENT));
         }
         if (totalRested > 0)
@@ -163,46 +142,23 @@ public partial class PTManager
         PTAdventureLog.Log("The Party has been Healed! Healing received: " + totalHealed + " HP. Cost: " + healCost + " gold. Remaining gold: " + gold);
     }
 
-    public void OnRecruit(InputAction.CallbackContext context)                                           //Method to handle F key to recruit a new party member
+    public void OnRecruit(InputAction.CallbackContext context)                                           //Method to handle F key: open the tavern's hiring board
     {
-        if (context.performed) TryRecruit();
-    }
-
-    public void TryRecruit()
-    {
-        if (!CanPerformTownAction("You are in Combat! Win the battle before recruiting new members!")) return;
-
-        if (partyMembers.Count >= maxPartyCount)                                                            //if the party is full, prevent recruitment
+        if (!context.performed) return;
+        if (actionBar != null)
         {
-          PTAdventureLog.Log("The party is full! You cannot recruit more members right now.");              //log party full message
-          return;
+            actionBar.ToggleTavern();                                                                    //pick who to hire with the mouse
+            return;
         }
-
-        if (partyBasePrefab == null || soulGen == null)                                                     //if base prefab or soul generator is not assigned
+        PTSoul cheapest = CheapestAffordableCandidate();                                                 //no action bar: hire the cheapest affordable candidate
+        if (cheapest != null)
         {
-          PTAdventureLog.Log("No one is available to join the party!");                                     //log message, no one to recruit
-          return;
+            TryHire(tavernCandidates.IndexOf(cheapest));
         }
-
-        int recruitCost = GetRecruitCost(out bool hasCoward);                                            //recruitment cost is half of total wages, x1.5 with cowards in the party
-        if (hasCoward)
+        else
         {
-          PTAdventureLog.Log("Cowardly members in the party have increased recruitment costs!");         //log cowardly surcharge
+            PTAdventureLog.Log("No one at the tavern will sign on for what you can pay.");
         }
-
-        if (gold < recruitCost)                                                                              //check if party can afford recruitment
-        {
-          PTAdventureLog.Log("Not enough gold to recruit! You need " + recruitCost +
-                             " gold but only have " + gold + " gold.");                                    //log insufficient gold
-          return;
-        }
-
-        ChangeGold(-recruitCost);                                                                            //deduct recruitment cost
-        PTAdventureLog.Log("Recruitment cost: " + recruitCost + " gold. Remaining: " + gold + " gold."); //log recruitment cost
-
-        SpawnRandomPartyMember();                                                                           //spawn a random soul using the base prefab and soul generator
-        
-        UpdateUI();                                                                                         //update UI after recruitment (gold changed, possibly party count changed)
     }
 
     public void OnReset(InputAction.CallbackContext context)                                             //Method to handle Escape key press - reloads the active scene
@@ -245,7 +201,8 @@ public partial class PTManager
             ChangeGold(-blessCost);
             foreach (PTSoul member in partyMembers)
             {
-            member.Bless();
+                member.Bless();
+                ChangeLoyalty(member, LOYALTY_BLESSED);                                                  //a blessing on your coin earns some goodwill
             }
 
             hasBeenBlessed = true;                                                                              //set blessed as used for the day
@@ -301,9 +258,9 @@ public partial class PTManager
 
             if (resurrectedSoul != null)
             {
-                deadChar.ApplyTo(resurrectedSoul);                                                          //restore character data with penalties via centralized method
-
+                deadChar.ApplyTo(resurrectedSoul);                                                       //restore character data with penalties via centralized method
                 partyMembers.Add(resurrectedSoul);
+                Employ(resurrectedSoul, LOYALTY_RESURRECTED);                                            //back on the payroll, and grateful for it
 
                 //remove from dead lists
                 deadCharacters.Remove(deadChar);

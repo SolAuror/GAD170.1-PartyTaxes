@@ -15,6 +15,8 @@ public class DeadCharacterData                                                  
     public int level;
     public int currentXp;
     public int dailywages;
+    public int baseWage;
+    public PTEmployeeRecord employment;                                                                  //their employment file (loyalty, greed, history) comes back with them
     public int atrMight;                                                                                 //attributes are stored instead of derived stats, so they can be recalculated on resurrection
     public int atrAgility;
     public int atrConstitution;
@@ -32,6 +34,8 @@ public class DeadCharacterData                                                  
         level = soul.level;
         currentXp = soul.currentXp;
         dailywages = soul.dailywages;
+        baseWage = soul.baseWage;
+        employment = soul.employment;
         atrMight = soul.atrMight;
         atrAgility = soul.atrAgility;
         atrConstitution = soul.atrConstitution;
@@ -50,6 +54,8 @@ public class DeadCharacterData                                                  
         soul.level = level;
         soul.currentXp = currentXp;
         soul.dailywages = dailywages;
+        soul.baseWage = baseWage;
+        soul.employment = employment;
         soul.atrMight = atrMight;
         soul.atrAgility = atrAgility;
         soul.atrConstitution = atrConstitution;
@@ -67,7 +73,7 @@ public class DeadCharacterData                                                  
 
 public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions                            //inherit from MonoBehaviour and implement the IPlayerActions interface from the SimpleControls input actions
 {
-    public enum GameState { Town, Combat, GameOver }                                                     //what the game is doing right now, decides which actions are allowed
+    public enum GameState { Town, Combat, GameOver, Victory }                                            //what the game is doing right now, decides which actions are allowed
 #region Variables
   public bool debugMode = false;                                                                             //bool for debug toggling 
 
@@ -85,7 +91,6 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
   public int gold = 90;                                                                                      //integer # of gold
   public static event System.Action<int> OnGoldChanged;                                                     //event fired whenever gold changes, passes the new gold value
   public int commission = 50;                                                                                //integer # gold bonus from surviving combat
-  public int weeklyBonusCommission = 50;                                                                     //integer # gold bonus from living for a week
   public int totalWages;                                                                                     //integer # for total calculated wages, party member count x character dailywages.
   public int daysElapsed = 0;                                                                                //integer # of days elapsed       
   public int partyCount => partyMembers.Count;                                                               //derived from list - always in sync
@@ -115,10 +120,10 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
   };                                                                                                         // possible sleep messages
 
     public GameState State { get; private set; } = GameState.Town;                                       //current game state, replaces the old canSleep/gameOver flags
+    public bool IsRunOver => State == GameState.GameOver || State == GameState.Victory;                  //lost or won, either way no more actions
   public bool hasFought = false;                                                                             //bool to check if the player has fought
   public bool hasHealed = false;                                                                             //bool to check if the player has healed
   public bool hasBeenBlessed = false;
-  public int daysWithoutGold = 0;                                                                            //integer tracking consecutive days the party has had no gold, game over after 3
   
 
   private SimpleControls controls;                                                                           //reference to the input controls
@@ -129,23 +134,17 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
     private bool pointerOverUI = false;                                                                  //true while the mouse/touch is over a UI element, so UI clicks don't also count as attacks
 
 //constants for game balance and tuning
-  private const int DAYS_UNTIL_MUTINY = 3;                                                                   //days without gold before game over
   private const int BASE_HEAL_AMOUNT = 50;                                                                   //base HP restored per party member
   private const int HEAL_COST_PER_MEMBER = 10;                                                               //gold cost per party member for healing
   private const int BLESS_COST_PER_MEMBER = 100;                                                             //gold cost per party member for blessing
   private const int BASE_RESURRECTION_COST = 100;                                                            //base gold cost for resurrection
-  private const float THEFT_CHANCE_BROKE = 0.25f;                                                            //25% theft chance when broke
-  private const float THEFT_CHANCE_NORMAL = 0.1f;                                                           //10% theft chance normally
-    private const float THEFT_PERCENT_BROKE = 0.2f;                                                      //20% of gold stolen when broke
-    private const float THEFT_PERCENT_NORMAL = 0.1f;                                                     //10% of gold stolen normally
   private const float FLEE_COST_PERCENT = 0.1f;                                                              //10% of gold to flee
   private const int RESURRECTION_UNLOCK_DAY = 7;                                                             //day when resurrection becomes available
-    private const int WEEKLY_BONUS_INTERVAL = 7;                                                         //days between weekly bonuses
     private const float REST_HEAL_PERCENT = 0.25f;                                                       //share of max HP recovered overnight when wages are paid
     private const int ENCOUNTER_GRACE_DAYS = 3;                                                          //for the first days, encounters have exactly as many enemies as party members
-    private const float ENCOUNTER_MAX_MULTIPLIER = 1.5f;                                                 //max enemies per encounter = party size x this (rounded up), before escalation
-    private const int ESCALATION_START_DAY = 7;                                                          //day the extra enemy escalation begins
-    private const int ESCALATION_EVERY_DAYS = 3;                                                         //one more potential enemy every this many days after escalation starts
+    private const float ENCOUNTER_MAX_MULTIPLIER = 1.25f;                                                //max enemies per encounter = party size x this (rounded up), before escalation
+    private const int ESCALATION_START_DAY = 8;                                                          //day the extra enemy escalation begins (week 2)
+    private const int ESCALATION_EVERY_DAYS = 7;                                                         //one more potential enemy each week after escalation starts
 #endregion
 
 #region Initilization and Update
@@ -178,6 +177,9 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
             SpawnRandomPartyMember();                                                                        //spawn a random soul using the base prefab and soul generator
         }
 
+        RefreshTavern();                                                                                     //put the first candidates on the tavern board
+        PTAdventureLog.Log("By order of the Queen: you will remit " + NextTributeAmount + " gold to her auditor at the end of day " + NextTributeDay +
+                           ", and every week after, for " + RUN_LENGTH_DAYS + " days. Pay, and be pardoned. Fail twice, and hang.");
         dailyMsg = "Heil, <partyname>" + partyName + "</partyname>" +                                        //greet the party,
                    "! You have " + gold +                                                                   //display the party gold
                    " gold and " + partyMembers.Count +                                                      //display the number of party members
@@ -225,7 +227,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         if (goldText != null)
         {
             goldText.text = "Gold: " + gold;                                                                //display current gold
-            goldText.color = (gold <= 0 || daysWithoutGold > 0) ? Color.red : new Color(1f, 0.84f, 0f);   //tint red when broke or broke counter is active, gold colour otherwise
+            goldText.color = (gold < PayrollTonight || UnpaidLastNight > 0) ? Color.red : new Color(1f, 0.84f, 0f); //tint red when you can't cover tonight's payroll or someone went unpaid
         }
         
         if (battleText != null)
@@ -281,7 +283,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
             controls = "<b>TOWN</b>\n";
             controls += "E - Encounter Enemy\n";
             controls += "Spacebar - Sleep\n";
-            controls += "F - Recruit Member\n";
+            controls += "F - Tavern (hire)\n";
             if (!hasHealed)                                                                                 //only show heal option if the player has not healed yet today
             {
                 controls += "Q - Heal Party\n";
@@ -319,9 +321,10 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         UpdateUI();                                                                                         //automatically update UI whenever gold changes
     }
 
-    void TriggerGameOver(string message)                                                                 //Centralized method to trigger game over state
+    void TriggerGameOver(string message, string outcome = "Game Over")                                   //Centralized method to trigger game over state
     {
         PTAdventureLog.Log(message + " Game Over.");
+        RunOutcome = outcome;
         State = GameState.GameOver;
         UpdateUI();
     }

@@ -1,225 +1,267 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 using TMPro;
 
 namespace PartyTaxes
 {
     /// <summary>
-    /// Clickable buttons for every town and combat action, so the game can be played with mouse or touch.
-    /// Built entirely at runtime by PTManager (no scene setup needed); keyboard shortcuts keep working alongside it.
-    /// PTManager calls Refresh() whenever its UI updates, which re-reads costs and what is currently allowed.
+    /// Clickable controls for the whole game, built at runtime by PTManager (no scene setup needed).
+    /// Views: the main town actions, the tavern's hiring board, and the ledger (payroll, audits, firing).
+    /// A caught thief forces a decision before anything else. Keyboard shortcuts keep working alongside it.
+    /// PTManager calls Refresh() whenever its UI updates; every element re-reads its state from PTManager.
     /// </summary>
     public class PTActionBar : MonoBehaviour
     {
-        private class ActionButton
-        {
-            public GameObject root;
-            public Button button;
-            public TextMeshProUGUI label;
-            public Func<bool> isVisible;
-            public Func<bool> isEnabled;
-            public Func<string> getLabel;
-        }
+        public enum View { Main, Tavern, Ledger }
 
-        private static readonly Color PanelColor    = new Color(0.05f, 0.04f, 0.03f, 0.75f);
-        private static readonly Color ButtonColor   = new Color(0.30f, 0.22f, 0.12f, 1f);
-        private static readonly Color ButtonHover   = new Color(0.42f, 0.31f, 0.16f, 1f);
-        private static readonly Color ButtonPressed = new Color(0.20f, 0.15f, 0.08f, 1f);
-        private static readonly Color ButtonOff     = new Color(0.18f, 0.16f, 0.14f, 0.6f);
-        private static readonly Color TextColor     = new Color(1f, 0.93f, 0.78f, 1f);
-        private static readonly Color TextOff       = new Color(1f, 0.93f, 0.78f, 0.35f);
-
-        private const float PanelWidth   = 320f;
-        private const float ButtonHeight = 48f;
+        private const float PanelWidth   = 440f;
+        private const float ButtonHeight = 40f;
+        private const float SmallButtonHeight = 34f;
 
         private PTManager manager;
-        private TextMeshProUGUI header;
-        private readonly List<ActionButton> buttons = new List<ActionButton>();
+        private View view = View.Main;
+        private PTSoul fireConfirm;                                                        // first click on Fire asks for confirmation
+        private PTFinalLedgerPanel finalLedger;
+        private readonly List<Action> refreshers = new List<Action>();
 
         /// Builds the action bar on its own overlay canvas and returns it.
         public static PTActionBar Create(PTManager manager)
         {
-            EnsureEventSystem();
-
-            GameObject root = new GameObject("PT Action Bar", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            Canvas canvas = root.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 10;                                                    // draw above the main HUD
-
-            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);                      // same reference as UI_PTonScreen
-            scaler.matchWidthOrHeight = 0.5f;
-
-            PTActionBar bar = root.AddComponent<PTActionBar>();
+            RectTransform canvas = PTUIFactory.CreateCanvas("PT Action Bar", 10);
+            PTActionBar bar = canvas.gameObject.AddComponent<PTActionBar>();
             bar.manager = manager;
-            bar.Build(root.GetComponent<RectTransform>());
+            bar.Build(canvas);
             bar.Refresh();
             return bar;
         }
 
-        /// Re-reads costs and availability from PTManager and updates every button.
+        public void ToggleTavern()
+        {
+            SetView(view == View.Tavern ? View.Main : View.Tavern);
+        }
+
+        private void SetView(View newView)
+        {
+            view = newView;
+            fireConfirm = null;
+            Refresh();
+        }
+
+        /// Re-reads costs and availability from PTManager and updates every element.
         public void Refresh()
         {
             if (manager == null) return;
-
-            switch (manager.State)
+            if (manager.State != PTManager.GameState.Town && view != View.Main)
             {
-                case PTManager.GameState.Town:     header.text = "Day " + manager.daysElapsed + " - Town"; break;
-                case PTManager.GameState.Combat:   header.text = "Battle!"; break;
-                case PTManager.GameState.GameOver: header.text = "Game Over"; break;
+                view = View.Main;                                                          // sub-views only make sense in town
             }
-
-            foreach (ActionButton action in buttons)
+            foreach (Action refresh in refreshers)
             {
-                bool visible = action.isVisible();
-                action.root.SetActive(visible);
-                if (!visible) continue;
-
-                bool enabled = action.isEnabled();
-                action.button.interactable = enabled;
-                action.label.text = action.getLabel();
-                action.label.color = enabled ? TextColor : TextOff;
+                refresh();
+            }
+            if (manager.IsRunOver && finalLedger == null)
+            {
+                finalLedger = PTFinalLedgerPanel.Show(manager);                            // the run just ended: open the books
             }
         }
 
-        private bool InTown()   => manager.State == PTManager.GameState.Town;
-        private bool InCombat() => manager.State == PTManager.GameState.Combat;
-        private bool IsOver()   => manager.State == PTManager.GameState.GameOver;
+        // ── State helpers ──────────────────────────────────────────────
+        private bool InTown()     => manager.State == PTManager.GameState.Town;
+        private bool InCombat()   => manager.State == PTManager.GameState.Combat;
+        private bool Confronting() => InTown() && manager.PendingConfrontation != null;
+        private bool ShowView(View v) => InTown() && !Confronting() && view == v;
+        private PTSoul MemberAt(int slot) => slot < manager.partyMembers.Count ? manager.partyMembers[slot] : null;
+        private PTSoul CandidateAt(int slot) => slot < manager.TavernCandidates.Count ? manager.TavernCandidates[slot] : null;
 
-        private void Build(RectTransform canvasRect)
+        // ── Building ───────────────────────────────────────────────────
+        private void Build(RectTransform canvas)
         {
-            // Panel docked to the right edge of the screen, growing to fit its visible buttons
-            GameObject panel = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-            RectTransform panelRect = panel.GetComponent<RectTransform>();
-            panelRect.SetParent(canvasRect, false);
-            panelRect.anchorMin = new Vector2(1f, 0.5f);
-            panelRect.anchorMax = new Vector2(1f, 0.5f);
-            panelRect.pivot = new Vector2(1f, 0.5f);
-            panelRect.anchoredPosition = new Vector2(-24f, 80f);
-            panelRect.sizeDelta = new Vector2(PanelWidth, 0f);
-            panel.GetComponent<Image>().color = PanelColor;
+            RectTransform panel = PTUIFactory.CreatePanel("Panel", canvas, new Vector2(1f, 1f), new Vector2(-24f, -24f), PanelWidth);
 
-            VerticalLayoutGroup layout = panel.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(12, 12, 12, 12);
-            layout.spacing = 8f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-
-            ContentSizeFitter fitter = panel.GetComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            header = CreateLabel("Header", panelRect);
+            TextMeshProUGUI header = PTUIFactory.CreateLabel("Header", panel, 28f, TextAlignmentOptions.Center, 38f);
             header.fontStyle = FontStyles.Bold;
-            header.fontSizeMax = 28f;
-            header.gameObject.AddComponent<LayoutElement>().preferredHeight = 40f;
-
-            // Town
-            AddButton(panelRect, InTown, () => !manager.hasFought,
-                () => manager.hasFought ? "Already hunted today" : "Hunt goblins  [E]",
-                manager.TryEncounter);
-            AddButton(panelRect, InTown, () => !manager.PartyFull && manager.gold >= manager.RecruitCost,
-                () => manager.PartyFull ? "Party is full" : "Recruit  -" + manager.RecruitCost + "g  [F]",
-                manager.TryRecruit);
-            AddButton(panelRect, InTown, () => !manager.hasHealed && manager.gold >= manager.HealCost,
-                () => manager.hasHealed ? "Cleric is resting" : "Heal party  -" + manager.HealCost + "g  [Q]",
-                manager.TryHeal);
-            AddButton(panelRect, InTown, () => !manager.hasBeenBlessed && manager.gold >= manager.BlessCost,
-                () => manager.hasBeenBlessed ? "Already blessed today" : "Bless party  -" + manager.BlessCost + "g  [1]",
-                manager.TryBless);
-            AddButton(panelRect, () => InTown() && manager.ResurrectionUnlocked,
-                () => manager.FallenCount > 0 && !manager.PartyFull && manager.gold >= manager.CheapestResurrectionCost,
-                () => manager.FallenCount == 0 ? "No fallen to raise" : "Resurrect  -" + manager.CheapestResurrectionCost + "g+  [3]",
-                manager.TryResurrect);
-            AddButton(panelRect, InTown, () => true,
-                () => manager.gold >= manager.TotalDailyWages
-                    ? "Sleep  (wages " + manager.TotalDailyWages + "g)  [Space]"
-                    : "Sleep  (can't pay " + manager.TotalDailyWages + "g!)  [Space]",
-                manager.TrySleep);
-
-            // Combat
-            AddButton(panelRect, InCombat, () => manager.AwaitingPartyInput,
-                () => manager.AwaitingPartyInput ? manager.ActiveActorName + " attacks  [Click]" : "Enemies are acting...",
-                manager.TryAttack);
-            AddButton(panelRect, InCombat, () => manager.AwaitingPartyInput,
-                () => "Run away  -" + manager.FleeCost + "g  [R]",
-                manager.TryRunAway);
-
-            // Game over
-            AddButton(panelRect, IsOver, () => true, () => "Start a new run  [Esc]", manager.RestartRun);
-        }
-
-        private void AddButton(RectTransform parent, Func<bool> isVisible, Func<bool> isEnabled, Func<string> getLabel, Action onClick)
-        {
-            GameObject root = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-            root.GetComponent<RectTransform>().SetParent(parent, false);
-            root.GetComponent<LayoutElement>().preferredHeight = ButtonHeight;
-
-            Image image = root.GetComponent<Image>();
-            image.color = Color.white;                                                   // tinted by the button's colour block below
-
-            Button button = root.GetComponent<Button>();
-            button.targetGraphic = image;
-            ColorBlock colors = ColorBlock.defaultColorBlock;
-            colors.normalColor = ButtonColor;
-            colors.highlightedColor = ButtonHover;
-            colors.selectedColor = ButtonColor;
-            colors.pressedColor = ButtonPressed;
-            colors.disabledColor = ButtonOff;
-            button.colors = colors;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };          // arrow keys shouldn't move focus between actions
-            button.onClick.AddListener(() =>
+            Bind(header.gameObject, () => true, () =>
             {
-                onClick();
-                if (EventSystem.current != null)
+                switch (manager.State)
                 {
-                    EventSystem.current.SetSelectedGameObject(null);                     // don't leave the button selected, or Submit (Enter) would press it again
+                    case PTManager.GameState.Town:     header.text = "Day " + manager.daysElapsed + " of " + manager.RunLengthDays + " - Town"; break;
+                    case PTManager.GameState.Combat:   header.text = "Battle!"; break;
+                    case PTManager.GameState.GameOver: header.text = "Game Over"; break;
+                    case PTManager.GameState.Victory:  header.text = "Pardoned!"; break;
                 }
             });
 
-            TextMeshProUGUI label = CreateLabel("Label", root.GetComponent<RectTransform>());
-            RectTransform labelRect = label.rectTransform;
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = new Vector2(10f, 4f);
-            labelRect.offsetMax = new Vector2(-10f, -4f);
+            TextMeshProUGUI status = PTUIFactory.CreateLabel("Status", panel, 18f, TextAlignmentOptions.Center, 44f);
+            Bind(status.gameObject, () => !manager.IsRunOver, () =>
+                status.text = manager.TributeStatus + "\nPayroll tonight " + manager.PayrollTonight + "g  ·  Average loyalty " +
+                              Mathf.RoundToInt(manager.AverageLoyalty));
 
-            buttons.Add(new ActionButton
+            BuildConfrontation(panel);
+            BuildMainView(panel);
+            BuildTavernView(panel);
+            BuildLedgerView(panel);
+
+            // Combat
+            AddButton(panel, InCombat, () => manager.AwaitingPartyInput,
+                () => manager.AwaitingPartyInput ? manager.ActiveActorName + " attacks  [Click]" : "Enemies are acting...",
+                manager.TryAttack);
+            AddButton(panel, InCombat, () => manager.AwaitingPartyInput,
+                () => "Run away  -" + manager.FleeCost + "g  [R]",
+                manager.TryRunAway);
+
+            // Run over
+            AddButton(panel, () => manager.IsRunOver, () => true, () => "Start a new run  [Esc]", manager.RestartRun);
+        }
+
+        private void BuildConfrontation(RectTransform panel)
+        {
+            TextMeshProUGUI caught = PTUIFactory.CreateLabel("Caught", panel, 20f, TextAlignmentOptions.Center, 52f);
+            Bind(caught.gameObject, Confronting, () =>
             {
-                root = root,
-                button = button,
-                label = label,
-                isVisible = isVisible,
-                isEnabled = isEnabled,
-                getLabel = getLabel,
+                PTSoul thief = manager.PendingConfrontation;
+                caught.text = "Caught <b>" + thief.Name + "</b> with " + thief.employment.stolenUnrecovered + "g of your gold!";
+            });
+            AddButton(panel, Confronting, () => true,
+                () => "Dock their pay  (+" + manager.PendingConfrontation.employment.stolenUnrecovered + "g, loyalty down)",
+                () => manager.ResolveConfrontation(PTManager.Confrontation.DockPay));
+            AddButton(panel, Confronting, () => true, () => "Forgive them  (loyalty up, less greedy)",
+                () => manager.ResolveConfrontation(PTManager.Confrontation.Forgive));
+            AddButton(panel, Confronting, () => true, () => "Fire them  (no severance)",
+                () => manager.ResolveConfrontation(PTManager.Confrontation.Fire));
+        }
+
+        private void BuildMainView(RectTransform panel)
+        {
+            Func<bool> main = () => ShowView(View.Main);
+            AddButton(panel, main, () => !manager.hasFought,
+                () => manager.hasFought ? "Already hunted today" : "Hunt goblins  [E]",
+                manager.TryEncounter);
+            AddButton(panel, main, () => true,
+                () => "Tavern: " + manager.TavernCandidates.Count + " for hire  [F]",
+                () => SetView(View.Tavern));
+            AddButton(panel, main, () => true,
+                () => "Ledger: payroll & audits" + (manager.LastNightMissing > 0 && !manager.hasAudited ? "  (gold went missing!)" : ""),
+                () => SetView(View.Ledger));
+            AddButton(panel, main, () => !manager.hasHealed && manager.gold >= manager.HealCost,
+                () => manager.hasHealed ? "Cleric is resting" : "Heal party  -" + manager.HealCost + "g  [Q]",
+                manager.TryHeal);
+            AddButton(panel, main, () => !manager.hasBeenBlessed && manager.gold >= manager.BlessCost,
+                () => manager.hasBeenBlessed ? "Already blessed today" : "Bless party  -" + manager.BlessCost + "g  [1]",
+                manager.TryBless);
+            AddButton(panel, () => main() && manager.ResurrectionUnlocked,
+                () => manager.FallenCount > 0 && !manager.PartyFull && manager.gold >= manager.CheapestResurrectionCost,
+                () => manager.FallenCount == 0 ? "No fallen to raise" : "Resurrect  -" + manager.CheapestResurrectionCost + "g+  [3]",
+                manager.TryResurrect);
+            AddButton(panel, main, () => true, SleepLabel, manager.TrySleep);
+        }
+
+        private string SleepLabel()
+        {
+            int due = manager.PayrollTonight + (manager.IsTributeDay ? manager.NextTributeAmount : 0);
+            string what = manager.IsTributeDay ? "tribute + payroll " : "payroll ";
+            return manager.gold >= due
+                ? "Sleep  (" + what + due + "g)  [Space]"
+                : "Sleep  (" + what + due + "g - you're short!)  [Space]";
+        }
+
+        private void BuildTavernView(RectTransform panel)
+        {
+            Func<bool> tavern = () => ShowView(View.Tavern);
+            for (int i = 0; i < manager.TavernSize; i++)
+            {
+                int slot = i;
+                Func<bool> visible = () => tavern() && CandidateAt(slot) != null;
+                TextMeshProUGUI info = PTUIFactory.CreateLabel("Candidate", panel, 18f, TextAlignmentOptions.Left, 46f);
+                Bind(info.gameObject, visible, () =>
+                {
+                    PTSoul c = CandidateAt(slot);
+                    info.text = "<b>" + c.Name + "</b>  L" + c.level + "\nHP " + c.maxHP + "  ATK " + c.attack + "  DEF " + c.defense +
+                                "  ·  " + c.dailywages + "g/day  ·  " + (c.employment != null ? c.employment.GreedHint : "");
+                });
+                AddButton(panel, visible,
+                    () => !manager.PartyFull && manager.gold >= manager.SigningFee(CandidateAt(slot)),
+                    () => manager.PartyFull ? "Party is full" : "Hire  (signing fee " + manager.SigningFee(CandidateAt(slot)) + "g)",
+                    () => manager.TryHire(slot), SmallButtonHeight);
+            }
+            TextMeshProUGUI empty = PTUIFactory.CreateLabel("Empty", panel, 18f, TextAlignmentOptions.Center, 30f);
+            Bind(empty.gameObject, () => tavern() && manager.TavernCandidates.Count == 0, () => empty.text = "No one else is looking for work today.");
+            AddButton(panel, tavern, () => true, () => "Back", () => SetView(View.Main));
+        }
+
+        private void BuildLedgerView(RectTransform panel)
+        {
+            Func<bool> ledger = () => ShowView(View.Ledger);
+            TextMeshProUGUI summary = PTUIFactory.CreateLabel("LedgerSummary", panel, 18f, TextAlignmentOptions.Center, 28f);
+            Bind(summary.gameObject, ledger, () => summary.text = manager.LastNightMissing > 0
+                ? "<color=#FF8080>" + manager.LastNightMissing + "g went missing last night.</color> Audit a suspect?"
+                : "The books balanced last night.");
+
+            for (int i = 0; i < manager.maxPartyCount; i++)
+            {
+                int slot = i;
+                Func<bool> visible = () => ledger() && MemberAt(slot) != null;
+                TextMeshProUGUI info = PTUIFactory.CreateLabel("Member", panel, 18f, TextAlignmentOptions.Left, 44f);
+                Bind(info.gameObject, visible, () =>
+                {
+                    PTSoul m = MemberAt(slot);
+                    PTEmployeeRecord job = m.employment;
+                    info.text = "<b>" + m.Name + "</b>  L" + m.level + "  ·  " + m.dailywages + "g/day\n" +
+                                (job != null ? job.Mood + " (" + job.loyalty + ")  ·  " + job.GreedHint +
+                                               (job.nightsUnpaid > 0 ? "  ·  <color=#FF8080>unpaid " + job.nightsUnpaid + " night(s)</color>" : "") : "");
+                });
+
+                RectTransform row = PTUIFactory.CreateRow(panel, SmallButtonHeight);
+                Bind(row.gameObject, visible, () => { });
+                AddButton(row, visible, () => true,
+                    () => MemberAt(slot) != null && MemberAt(slot).employment != null && !MemberAt(slot).employment.payTonight ? "Pay: <color=#FF8080>NO</color>" : "Pay: yes",
+                    () => manager.TogglePay(MemberAt(slot)), SmallButtonHeight);
+                AddButton(row, visible, () => !manager.hasAudited,
+                    () => manager.hasAudited ? "Audited today" : "Audit",
+                    () => { fireConfirm = null; manager.TryAudit(MemberAt(slot)); }, SmallButtonHeight);
+                AddButton(row, visible, () => true,
+                    () => fireConfirm != null && fireConfirm == MemberAt(slot) ? "<color=#FF8080>Sure?</color>" : "Fire  -" + manager.SeveranceFor(MemberAt(slot)) + "g",
+                    () => OnFireClicked(MemberAt(slot)), SmallButtonHeight);
+            }
+            AddButton(panel, ledger, () => true, () => "Back", () => SetView(View.Main));
+        }
+
+        private void OnFireClicked(PTSoul member)
+        {
+            if (member == null) return;
+            if (fireConfirm != member)
+            {
+                fireConfirm = member;                                                      // firing can't be undone: ask once
+                Refresh();
+                return;
+            }
+            fireConfirm = null;
+            manager.TryFire(member);
+        }
+
+        // ── Element plumbing ───────────────────────────────────────────
+        private void Bind(GameObject element, Func<bool> isVisible, Action update)
+        {
+            refreshers.Add(() =>
+            {
+                bool visible = isVisible();
+                element.SetActive(visible);
+                if (visible) update();
             });
         }
 
-        private static TextMeshProUGUI CreateLabel(string name, RectTransform parent)
+        private void AddButton(RectTransform parent, Func<bool> isVisible, Func<bool> isEnabled, Func<string> getLabel, Action onClick, float height = ButtonHeight)
         {
-            GameObject textObj = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
-            textObj.GetComponent<RectTransform>().SetParent(parent, false);
-            TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();                // uses the default font from TMP Settings
-            text.alignment = TextAlignmentOptions.Center;
-            text.color = TextColor;
-            text.raycastTarget = false;
-            text.enableAutoSizing = true;                                                  // long hero names shrink to fit
-            text.fontSizeMin = 14f;
-            text.fontSizeMax = 22f;
-            return text;
-        }
-
-        private static void EnsureEventSystem()                                            // buttons need an EventSystem to receive clicks
-        {
-            if (FindFirstObjectByType<EventSystem>() != null) return;
-            new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+            TextMeshProUGUI label;
+            Button button = PTUIFactory.CreateButton(parent, height, onClick, out label);
+            Bind(button.gameObject, isVisible, () =>
+            {
+                bool enabled = isEnabled();
+                button.interactable = enabled;
+                label.text = getLabel();
+                label.color = enabled ? PTUIFactory.TextColor : PTUIFactory.TextOff;
+            });
         }
     }
 }

@@ -38,6 +38,7 @@ public class PTSoul : MonoBehaviour                                             
     public float critMultiplier;                                                                    //float for the critical hit damage multiplier, derived from Luck, Might and Sense
     public int defense;                                                                             //integer for the defense stat of the soul, derived from Constitution
     public int dailywages = 20;                                                                          //integer for the daily wages of the soul
+    public int baseWage = 0;                                                                             //wage at level 1, level up raises are a share of this (set automatically if 0)
     public int levelBonusHP = 0;                                                                         //extra max HP earned from level ups, kept separate so it survives stat recalculation
     public float statMultiplier = 1f;                                                                    //multiplier on max HP, attack and defense (0.9 for souls Marked by Death)
 
@@ -45,7 +46,8 @@ public class PTSoul : MonoBehaviour                                             
     public bool isAlive => currentHP > 0;                                                           //bool to check if the soul is alive
     public bool isCowardly = false;                                                                   //bool to determine if the soul is cowardly, -could apply to enemies later
     public bool markedByDeath = false;                                                              //bool to track if character was resurrected, suffers stat penalties and cannot become cowardly
-    public bool hasFled = false;                                                                    //bool to track if character fled from combat during the current battle
+    public bool hasFled = false;                                                                         //bool to track if character fled from combat during the current battle
+    [System.NonSerialized] public PTEmployeeRecord employment;                                           //loyalty, greed and pay history for party members (null for enemies)
 
     [Header("Enemy Attributes")]                                                                    //Header for visiual seperation in the inspector
     public bool isAdversary = false;                                                                //bool to determine if the soul is an enemy or a party member, default is false for party members
@@ -54,9 +56,9 @@ public class PTSoul : MonoBehaviour                                             
                                                                                                     // mening it will reward more the longer it has been alive set to 10 default for a level 1 soul.
 
     private const int PARTY_DEFENSE_BONUS = 3;                                                           //flat defense bonus for party members, since they take more hits than enemies
-    private const int HP_PER_LEVEL = 10;                                                                 //max HP gained on each level up
+    private const int HP_PER_LEVEL = 15;                                                                 //max HP gained on each level up
     private const float LEVEL_UP_HEAL_PERCENT = 0.3f;                                                    //fraction of max HP restored on level up
-    private const float WAGE_GROWTH_PER_LEVEL = 1.25f;                                                   //daily wages are multiplied by this on each level up
+    private const float WAGE_RAISE_PER_LEVEL = 0.15f;                                                    //each level above 1 adds 15% of the base wage
     private bool isInitialized = false;                                                                  //true once this soul has been set up, so Start() never overwrites generated or resurrected data
 
     public void Start()
@@ -72,7 +74,8 @@ public class PTSoul : MonoBehaviour                                             
     /// Spawners call this straight after setting a soul up, so Start() running a frame later won't reset it.
     public void FinishSetup()
     {
-        xpToNextLevel = (level + 1) * 50;                                                                //XP required for next level based on level formula
+        if (baseWage <= 0) baseWage = dailywages;                                                        //remember the level 1 wage that raises are based on
+        xpToNextLevel = XpToNextLevel(level);                                                            //XP required for next level based on level formula
         RecalculateStats();                                                                              //derive stats from attributes
         currentHP = maxHP;                                                                               //start at full HP
         isInitialized = true;
@@ -175,7 +178,18 @@ public class PTSoul : MonoBehaviour                                             
         }
     }
 
-    public void GainXP(int xpAmount)                                  //method to gain XP
+    public static int XpToNextLevel(int level)                                                           //XP needed to go from this level to the next: grows a little faster than linear
+    {
+        return Mathf.RoundToInt((level + 1) * 50 * Mathf.Sqrt(level));
+    }
+
+    public void RecalculateWage()                                                                        //daily wage for the current level
+    {
+        if (baseWage <= 0) baseWage = dailywages;
+        dailywages = Mathf.RoundToInt(baseWage * (1f + WAGE_RAISE_PER_LEVEL * (level - 1)));
+    }
+
+    public void GainXP(int xpAmount)                                                                     //method to gain XP
     {
         currentXp += xpAmount;
         while (currentXp >= xpToNextLevel)                            // Check for level up
@@ -190,12 +204,12 @@ public class PTSoul : MonoBehaviour                                             
         level++;
         accumulatedLifeXp += currentXp;                                                                  // Increase accumulated life XP by the currently held XP before it resets to 0.
         currentXp = Mathf.Max(0, currentXp - xpToNextLevel);                                             // Carry over XP overflow (never negative when levelled up directly, e.g. new recruits)
-        xpToNextLevel = (level + 1) * 50;                                                                // Increase XP required for next level
+        xpToNextLevel = XpToNextLevel(level);                                                            // Increase XP required for next level
         ChangeAttribute(levelUpAttribute, 1, false);                                                     // +1 to this soul's affinity attribute
         levelBonusHP += HP_PER_LEVEL;                                                                    // +10 max HP per level
         RecalculateStats();                                                                              // Recalculate stats from attributes on level up
         currentHP = Mathf.Min(maxHP, currentHP + Mathf.RoundToInt(maxHP * LEVEL_UP_HEAL_PERCENT));       // Restore 30% of max HP on level up, capped at max
-        dailywages = Mathf.RoundToInt(dailywages * WAGE_GROWTH_PER_LEVEL);                               // Increase daily wages by 25% on level up
+        RecalculateWage();                                                                               // Raise daily wages by 15% of the base wage per level
         if(!isAdversary)
         {
             PTAdventureLog.Log(Name + " reached level " + level + "! +1 " + levelUpAttribute + " and +" + HP_PER_LEVEL + " max health. Their Daily wages are now " + dailywages + " gold."); // Log level up event

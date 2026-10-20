@@ -50,59 +50,58 @@ public partial class PTManager
             PTSoul soul = newRecruit.GetComponent<PTSoul>();
             if (soul != null)
             {
-                partyMembers.Add(soul);                                                                    //add the new member to the party
-                LevelUpToPartyAverage(soul);                                                                //level up new recruit to match party average
-                PTAdventureLog.Log(soul.Name + " joined " + partyName + "!");                               //log message that a new member has joined
+                int partyLevel = GetAveragePartyLevel();                                                 //average of the members already in the party
+                partyMembers.Add(soul);                                                                  //add the new member to the party
+                LevelUpTo(soul, partyLevel, true);                                                       //level up new recruit to match party average
+                Employ(soul);                                                                            //put them on the payroll
+                PTAdventureLog.Log(soul.Name + " joined " + partyName + "!");                            //log message that a new member has joined
             }
         }
     }
 
-    void RemovePartyMember(PTSoul member)                                                                   //Method to remove a party member and destroy their GameObject
+    void RemovePartyMember(PTSoul member, EmploymentStatus status, string fate)                          //Method to remove a party member (died, deserted, fired or seized) and destroy their GameObject
     {
-        if (partyMembers.Contains(member))
+        if (!partyMembers.Contains(member)) return;
+
+        if (member.employment != null)                                                                   //close their file in the run ledger
         {
-            //only add to dead lists if the member is actually dead
-            if (!member.isAlive)
-            {
-                deadCharacters.Add(new DeadCharacterData(member, partyBasePrefab));                             //store character data with base prefab for resurrection
-            }
-            
-            partyMembers.Remove(member);                                                                    //remove from list
-            Destroy(member.gameObject);                                                                     //destroy the GameObject
+            member.employment.status = status;
+            member.employment.fate = fate;
+            if (status == EmploymentStatus.Slain) member.employment.timesDied++;
+        }
+        if (status == EmploymentStatus.Slain)                                                            //only the dead can be resurrected
+        {
+            deadCharacters.Add(new DeadCharacterData(member, partyBasePrefab));                          //store character data with base prefab for resurrection
+        }
 
-            PTAdventureLog.Log(member.Name + " has left the party!");                                       //log message that a member has left
+        partyMembers.Remove(member);                                                                     //remove from list
+        Destroy(member.gameObject);                                                                      //destroy the GameObject
+        if (status != EmploymentStatus.Slain)                                                            //deaths are already announced by combat
+        {
+            PTAdventureLog.Log(member.Name + " has left the party!");
+        }
 
-            if (debugMode)                                                                                  //if debug mode is enabled, print debug message
-            {
-                Debug.Log(member.Name + " has left the party!");
-            }
+        if (debugMode)                                                                                   //if debug mode is enabled, print debug message
+        {
+            Debug.Log(member.Name + " left the party: " + fate);
         }
     }
 
-    void LevelUpToPartyAverage(PTSoul newMember)                                                            //Level up new member to match party average
+    void LevelUpTo(PTSoul soul, int targetLevel, bool fullHeal)                                          //Level up a recruit or candidate to the given level (usually the party average)
     {
-        if (partyMembers.Count <= 1) return;                                                                //no need if they're the only member or first member
-
-        int totalLevels = 0;
-        foreach (PTSoul member in partyMembers)
+        while (soul.level < targetLevel)
         {
-            if (member != newMember)                                                                        //exclude the new member from calculation
-            {
-                totalLevels += member.level;
-            }
+            soul.LevelUp();
         }
-        int avgLevel = totalLevels / (partyMembers.Count - 1);
-
-        while (newMember.level < avgLevel)
+        if (fullHeal)
         {
-            newMember.LevelUp();
+            soul.currentHP = soul.maxHP;                                                                 //new recruits always join at full health
         }
-        newMember.currentHP = newMember.maxHP;                                                           //new recruits always join at full health
-        newMember.UpdateUI();
+        soul.UpdateUI();
 
-        if (newMember.level > 1 && debugMode)
+        if (soul.level > 1 && debugMode)
         {
-            Debug.Log(newMember.Name + " leveled up to match party average (Level " + avgLevel + ")");
+            Debug.Log(soul.Name + " leveled up to match party average (Level " + targetLevel + ")");
         }
     }
 

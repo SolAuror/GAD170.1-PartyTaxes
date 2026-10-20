@@ -12,6 +12,8 @@ public partial class PTManager
     [SerializeField, Tooltip("Delay in seconds between each enemy attack")]
     private float enemyAttackDelay = 0.3f;
 
+    private const int COMMISSION_PER_WEEK = 25;                                                          //victory commission grows by this much each week
+
 
     private List<PTSoul> partyTurnQueue = new List<PTSoul>();                            // party members sorted by atrSense for the current round
     private int partyTurnIndex = 0;                                             // current position in the party queue
@@ -45,7 +47,7 @@ public partial class PTManager
 
     public void TryEncounter()                                                                           //Head out on the day's hunt: spawn a scaled group of enemies and start combat
     {
-        if (State == GameState.GameOver) return;                                                         //block input after game over
+        if (IsRunOver) return;                                                         //block input after game over
         if (State == GameState.Combat)
         {
             PTAdventureLog.Log("You are already fighting an enemy!");                                    //log already fighting message
@@ -260,7 +262,7 @@ public partial class PTManager
             if (AreAllPartyMembersDead())
             {
                 ResetCombatState();
-                TriggerGameOver("You've been slaughtered by the enemy!");
+                TriggerGameOver("You've been slaughtered by the enemy!", "Slain");
             }
             else
             {
@@ -285,7 +287,7 @@ public partial class PTManager
             if (AreAllPartyMembersDead())
             {
                 ResetCombatState();
-                TriggerGameOver("You've been slaughtered by the enemy!");
+                TriggerGameOver("You've been slaughtered by the enemy!", "Slain");
             }
             else
             {
@@ -333,7 +335,7 @@ public partial class PTManager
             if (AreAllPartyMembersDead())
             {
                 ResetCombatState();
-                TriggerGameOver("You've been slaughtered by the enemy!");
+                TriggerGameOver("You've been slaughtered by the enemy!", "Slain");
             }
             else
             {
@@ -352,7 +354,7 @@ public partial class PTManager
 
         // If enemies went first, continue to next round
         if (adversaries.Count == 0) { OnAllEnemiesDefeated(); return; }
-        if (AreAllPartyMembersDead()) { ResetCombatState(); TriggerGameOver("You've been slaughtered by the enemy!"); return; }
+        if (AreAllPartyMembersDead()) { ResetCombatState(); TriggerGameOver("You've been slaughtered by the enemy!", "Slain"); return; }
 
         // ── Start the next round ──────────────────────────────────
         PTAdventureLog.Log("─── New Round ───");
@@ -431,6 +433,12 @@ public partial class PTManager
         if (!target.isAlive)
         {
             PTAdventureLog.Log("<enemy>" + target.Name + "</enemy>" + " has been slain by " + attacker.Name + "!");
+            if (attacker.employment != null)                                                             //credit the kill in their employment file
+            {
+                attacker.employment.kills++;
+                attacker.employment.goldLooted += target.goldReward;
+                attacker.employment.ChangeLoyalty(LOYALTY_KILL);
+            }
             ChangeGold(target.goldReward);
             ChangeXP(target.accumulatedLifeXp, "<enemy>" + target.Name + "</enemy>");
             PTAdventureLog.Log("<enemy>" + target.Name + "</enemy>" + " has been slain! You found " + target.goldReward + " gold on the corpse.");
@@ -474,7 +482,8 @@ public partial class PTManager
                     PTAdventureLog.Log("<enemy>" + adv.Name + "</enemy>" + " gained " + xpShare + " XP for slaying " + partyTarget.Name + "!");
                 }
             }
-            RemovePartyMember(partyTarget);
+            ChangePartyLoyalty(LOYALTY_ALLY_DIED, partyTarget);                                          //losing a comrade shakes everyone
+            RemovePartyMember(partyTarget, EmploymentStatus.Slain, "Slain by " + enemyAttacker.Name + " on day " + daysElapsed);
         }
     }
 #endregion
@@ -490,7 +499,7 @@ public partial class PTManager
 
     public void TryAttack()                                                                              //the active party member attacks a random enemy
     {
-        if (State == GameState.GameOver) return;
+        if (IsRunOver) return;
 
         if (adversaries.Count == 0)
         {
@@ -534,11 +543,12 @@ public partial class PTManager
     private void OnAllEnemiesDefeated()
     {
         ResetCombatState();
-        ChangeGold(commission);
+        int commissionToday = commission + COMMISSION_PER_WEEK * ((daysElapsed - 1) / 7);                //the frontier pays more as the run goes on
+        ChangeGold(commissionToday);
         SetSunIntensity(0.1f);
         State = GameState.Town;
         PTAdventureLog.Log("You have defeated all the enemies! You can now sleep through the night.");
-        PTAdventureLog.Log("You earned a commission of " + commission + " gold! You have " + gold + " gold in total.");
+        PTAdventureLog.Log("You earned a commission of " + commissionToday + " gold! You have " + gold + " gold in total.");
         UpdateUI();
     }
 
@@ -566,7 +576,7 @@ public partial class PTManager
 
     public void TryRunAway()                                                                             //the active party member tries to flee the battle
     {
-        if (State == GameState.GameOver) return;                                                         //block input after game over
+        if (IsRunOver) return;                                                         //block input after game over
 
         if (adversaries.Count == 0)                                                                       //if not in combat, can't flee
         {

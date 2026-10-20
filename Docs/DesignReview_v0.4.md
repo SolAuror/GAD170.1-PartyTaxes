@@ -226,7 +226,7 @@ Do these alongside Phase 0. They're small now and expensive later.
 | Phase | Scope | Est. | Exit criteria |
 |---|---|---|---|
 | **0 · Stabilise** ✅ | Fix the §3.6 bugs. Level-ups grant stats. Overnight regen. `GameState` + `SoulData` split. Clickable UI. Update the README. | 1 wk | 📊 Median run > 12 days. Day-1 wipe < 3%. |
-| **1 · The Ledger (vertical slice)** | Hiring board, fire, individual payroll, Loyalty/Greed theft + Audit, Queen's tribute + 28-day win, Final Ledger screen. | 2–3 wks | Playtesters can explain *why* they lost. 📊 Endings: ≥ 50% economic (tribute/mutiny), ≤ 35% wipe. |
+| **1 · The Ledger (vertical slice)** ✅ | Hiring board, fire, individual payroll, Loyalty/Greed theft + Audit, Queen's tribute + 28-day win, Final Ledger screen. | 2–3 wks | Playtesters can explain *why* they lost. 📊 Endings: ≥ 50% economic (tribute/mutiny), ≤ 35% wipe. |
 | **2 · Combat rework** | Auto-combat + speed control, gold interventions, stances, job board (6–8 jobs). | 2 wks | Fight ≤ 45 s. ≤ 6 decisions per fight. |
 | **3 · Variety** | 15–20 traits, 30+ night events, wage negotiation, 3 Accusations, Audit levels 1–5. | 2 wks | Two runs on different seeds feel different by day 3. |
 | **4 · Ship** | WebGL, title/settings/tutorial, audio pass, itch page, a closed playtest of 10+ people, then launch. | 1–2 wks | Average session ≥ 25 min. ≥ 30% of testers start a second run. |
@@ -245,6 +245,26 @@ Do these alongside Phase 0. They're small now and expensive later.
 | README | ✅ Updated to v0.5 |
 | Exit criteria | ✅ 📊 Median 13–14 days for strategies that recruit (10 for one that never recruits); day-1 wipes 0.4–2.4% |
 | Verification | `Tools/HeadlessTests` compiles all scripts against Unity API stubs and runs 25 behaviour checks. **Not yet run in the Unity editor**: needs a play-test pass |
+
+### Phase 1 status (v0.6)
+
+| Item | Status |
+|---|---|
+| Queen's tribute + 28-day win | ✅ 200/350/500/700 at the end of every 7th day, taken before wages. First miss: gold and best-paid hero seized. Second miss (or missing the last one): hanged. Paying day 28: pardoned |
+| Individual payroll | ✅ Per-member pay toggles in the Ledger view; paid in order while gold lasts |
+| Loyalty & Greed theft | ✅ Visible loyalty, hidden greed with a hint, per-member nightly theft, morning ledger discrepancy |
+| Audit + confrontation | ✅ Once a day; catch chance from Sense; dock pay / forgive / fire; innocent suspects resent it |
+| Mutiny & desertion | ✅ Mutiny below 20 average loyalty or two members below 10; desertion at 0 loyalty; warnings in the log. Replaces the old flat 3-day rule |
+| Hiring board | ✅ 3 visible candidates each morning (stats, wage, greed hint), signing fee of 2 days' wages |
+| Fire | ✅ With confirmation; one day's wage severance, or −10 loyalty for the others if you can't pay |
+| Final Ledger screen | ✅ Outcome, score, totals, per-hire books, biggest thief, best earner |
+| Contract types (loot share, signing bonus) | ⏸️ Moved to Phase 3. They pair naturally with traits, and day-wage contracts already carry the core tension |
+| Goblin King contract on day 28 | ⏸️ Moved to Phase 2's job board, where contracts live |
+| Economy re-tune | Required: compounding wages made every tribute schedule unwinnable. Raises are now linear (+15% of base per level), XP grows with √level, commission +25g/week, +15 HP per level, escalation +1 enemy per week. See README v0.6 |
+| Exit criteria | ✅ 📊 *Accountant* play: 54% economic endings, 20% slain, 26% pardoned. *Naive*: 78% economic, 8% slain, 14% pardoned. Skill now beats spending freely almost 2:1 |
+| Verification | `Tools/HeadlessTests`: 54 behaviour checks, including a full night sequence. **Not yet run in the Unity editor** |
+
+Open question for playtests: scripted players almost never trigger mutiny (3%), because they always pay when they can. Watch whether humans deliberately stiff people, and whether the loyalty warnings come early enough to read.
 
 **If time is short:** Phase 0 plus the Queen's tribute, Loyalty/Greed theft, the hiring board, and night events (as plain text, no new art) are enough for a strong jam-scale itch release. The theme is carried by systems, not content.
 
