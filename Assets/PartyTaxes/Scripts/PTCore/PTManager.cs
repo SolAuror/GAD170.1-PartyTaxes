@@ -130,6 +130,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
   private List<DeadCharacterData> deadCharacters = new List<DeadCharacterData>();                           //stores full data of dead characters for resurrection
     private PTSoulGen soulGen;                                                                           //reference to the soul generator for spawning recruits and enemies
     private PTActionBar actionBar;                                                                       //clickable buttons for every action, built at runtime
+    private Image battleBanner;                                                                          //the cloth banner behind battleText, red in battle and blue in town
     private bool pointerOverUI = false;                                                                  //true while the mouse/touch is over a UI element, so UI clicks don't also count as attacks
 
 //constants for game balance and tuning
@@ -216,7 +217,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
     {
         if (goldText != null)
         {
-            goldText.text = "Gold: " + gold;                                                                //display current gold
+            goldText.text = "<b>" + gold + "</b> <size=70%>gold</size>";                                     //display current gold (next to the coin)
             goldText.color = (gold < PayrollTonight || UnpaidLastNight > 0) ? PTUITheme.InkRed : PTUITheme.Ink; //red ink when you can't cover tonight's payroll or someone went unpaid
         }
         
@@ -225,16 +226,18 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
             if (adversaries.Count > 0)                                                                      //if in battle
             {
                 battleText.text = "In battle with " + adversaries.Count + " enemies";           //display enemy count
+                if (battleBanner != null) battleBanner.color = PTUITheme.BannerWar;             //war banner
             }
             else                                                                                            //if not in battle
             {
                 battleText.text = "In Town";                                                   //display in town message
+                if (battleBanner != null) battleBanner.color = PTUITheme.BannerTown;
             }
         }
 
         if (dayText != null)
         {
-            dayText.text = "Day's passed: " + daysElapsed;                                                            //display current day
+            dayText.text = "<size=70%>Days served</size>\n" + (daysElapsed > 0 ? PTUITheme.Tally(daysElapsed) : "<i>none yet</i>"); //tally marks, like a prisoner's wall
         }
 
         if (PartyNameText != null)
@@ -249,15 +252,16 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         }
     }
 
-    void StyleHud()                                                                                      //Method to restyle the HUD prefab in the paper-and-ink theme (see PTUITheme)
+    void StyleHud()                                                                                      //Method to turn the HUD prefab's texts into things in the world (see PTUIFactory.WrapInPlate)
     {
         const float edge = 24f;                                                                          //gap from the screen edges
         const float bottomRow = 236f;                                                                    //party, gold and day sit just above the adventure log
-        PTUIFactory.WrapInPlate(controlsText, new Vector2(0f, 1f), new Vector2(edge, -edge), PTUITheme.Body, 22f);
-        PTUIFactory.WrapInPlate(battleText, new Vector2(0.5f, 1f), new Vector2(0f, -edge), PTUITheme.Heading, 30f);
-        PTUIFactory.WrapInPlate(PartyNameText, new Vector2(0f, 0f), new Vector2(edge, bottomRow), PTUITheme.Heading, 28f);
-        PTUIFactory.WrapInPlate(goldText, new Vector2(0.5f, 0f), new Vector2(0f, bottomRow), PTUITheme.Body, 30f, PTUITheme.Coin);
-        PTUIFactory.WrapInPlate(dayText, new Vector2(1f, 0f), new Vector2(-edge, bottomRow), PTUITheme.Heading, 28f);
+        PTUIFactory.WrapInPlate(controlsText, new Vector2(0f, 1f), new Vector2(edge, -edge - 6f), PTUITheme.Body, 22f, PTPlateStyle.Note);   //a note tacked up
+        RectTransform banner = PTUIFactory.WrapInPlate(battleText, new Vector2(0.5f, 1f), new Vector2(0f, -12f), PTUITheme.Heading, 30f, PTPlateStyle.Banner);
+        battleBanner = banner != null ? banner.GetComponent<Image>() : null;
+        PTUIFactory.WrapInPlate(PartyNameText, new Vector2(0f, 0f), new Vector2(edge, bottomRow), PTUITheme.Heading, 28f, PTPlateStyle.Tag);   //the company's tag
+        PTUIFactory.WrapInPlate(goldText, new Vector2(0.5f, 0f), new Vector2(0f, bottomRow), PTUITheme.Body, 30f, PTPlateStyle.Tag, PTUITheme.Coin);
+        PTUIFactory.WrapInPlate(dayText, new Vector2(1f, 0f), new Vector2(-edge, bottomRow), PTUITheme.Heading, 26f, PTPlateStyle.Tag);
     }
 
     void UpdateControlsDisplay()                                                                         //Method to update controls display based on context

@@ -1,13 +1,14 @@
 using System.Linq;
 using System.Text;
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 
 namespace PartyTaxes
 {
     /// <summary>
-    /// The end-of-run "Final Ledger": how the run ended, the score, where the money went,
-    /// and every hire's books, including who was stealing from you all along.
+    /// The end-of-run "Final Ledger", a page from your ledger book: how the run ended (stamped across it), the score,
+    /// where the money went, and every hire's books, including who was stealing from you all along.
     /// Built at runtime by PTActionBar when the run ends.
     /// </summary>
     public class PTFinalLedgerPanel : MonoBehaviour
@@ -24,7 +25,12 @@ namespace PartyTaxes
 
         private void Build(RectTransform canvas, PTManager manager)
         {
-            RectTransform panel = PTUIFactory.CreatePanel("Panel", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth, 48, 10f);
+            RectTransform panel = PTUIFactory.CreatePanel("Ledger Page", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth, 48, 10f);
+            panel.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(64, 52, 44, 52);   // binding on the left, page edges on the right
+            PTUIFactory.Slice(panel.GetComponent<Image>(), PTUITheme.LedgerPage, 2f, PTUITheme.PaperFlat);
+            PTUIFactory.AddShadow(panel.GetComponent<Image>(), new Vector2(8f, -8f));
+            PTUIFactory.AddMarginLines(panel, 48f);
+            panel.localRotation = Quaternion.Euler(0f, 0f, 0.6f);
 
             TextMeshProUGUI title = PTUIFactory.CreateTitle("Title", panel, 60f, 70f);
             title.text = "The Final Ledger";

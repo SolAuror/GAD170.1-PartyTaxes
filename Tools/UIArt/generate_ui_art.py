@@ -1,6 +1,8 @@
 """
 Generates the paper-and-ink UI art for Party Taxes (parchment, paper slips, wax, ink flourishes,
-stamps, seal, coin, vignette) into Assets/PartyTaxes/Resources/PartyTaxes/UI.
+stamps, seal, coin, vignette, and the diegetic objects: ledger page, notice board, pins, signpost
+planks, ink wash, banner, scroll rods, hang tags, eyelets, ink boxes) into
+Assets/PartyTaxes/Resources/PartyTaxes/UI.
 
 Everything is procedural and seeded, so re-running gives the same images. Existing .meta files
 are kept (their GUIDs stay stable); missing ones are written as Sprite imports.
@@ -179,7 +181,7 @@ def stamp():
     return to_image(np.full((h, w, 3), 255, np.float32), a)
 
 
-def wax_seal():
+def wax_seal(blank=False):
     w = h = 256
     y, x = np.mgrid[0:h, 0:w].astype(np.float32)
     dx, dy = x - w / 2, y - h / 2
@@ -196,6 +198,8 @@ def wax_seal():
     body = to_image(rgb, alpha)
     base = to_image(np.zeros((h, w, 3)), shadow)
     img = Image.alpha_composite(base, body)
+    if blank:
+        return img
     return emboss_letter(img, "Q", os.path.join(FONTS, "UnifrakturMaguntia-Book.ttf"), 112, (w / 2, h / 2 + 4),
                          light=(196, 70, 62, 200), dark=(60, 6, 8, 220), fill=(112, 16, 20, 255))
 
@@ -219,6 +223,198 @@ def vignette():
     y, x = np.mgrid[0:h, 0:w].astype(np.float32)
     r = np.sqrt(((x - w / 2) / (w / 2)) ** 2 + ((y - h / 2) / (h / 2)) ** 2) / np.sqrt(2)
     return to_image(np.zeros((h, w, 3)), 0.5 + 0.5 * smoothstep(0.25, 1.0, r))
+
+
+
+# ── Diegetic objects (ledger book, notice board, signs, banner, scroll, tags) ──
+WOOD = (122, 80, 44)
+LEDGER = (240, 231, 208)
+
+
+def grain(w, h, streaks=18, vertical=False):
+    """Wood grain: random rows stretched along the board, plus a little fine noise."""
+    if vertical:
+        return grain(h, w, streaks).T
+    rows = Image.fromarray(rng.random((h // 2 + 2, streaks)).astype(np.float32), "F").resize((w, h), Image.BICUBIC)
+    return np.clip(np.asarray(rows, np.float32) * 0.8 + noise(w, h, 4, 2) * 0.2, 0, 1)
+
+
+def ledger_page():
+    """A right-hand ledger page: clean cut edges, stitched binding on the left, pages stacked behind."""
+    w = h = 1024
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    left, top, right, bottom = 6, 6, w - 24, h - 24
+    inside = ((x >= left) & (x <= right) & (y >= top) & (y <= bottom)).astype(np.float32)
+    mottle = noise(w, h, 180, 4)
+    rgb = np.dstack([np.full((h, w), c, np.float32) for c in LEDGER]) * (1 + (mottle - 0.5) * 0.08)[..., None]
+    gutter = np.exp(-np.maximum(x - left, 0) / 44) * 0.42                                        # shadow where the page bends into the spine
+    age = np.exp(-np.minimum(np.minimum(x - left, right - x), np.minimum(y - top, bottom - y)).clip(0) / 26) * 0.18
+    age *= 0.7 + 0.6 * noise(w, h, 40, 3)
+    shade = np.clip(gutter + age, 0, 0.6)
+    rgb = rgb * (1 - shade[..., None]) + np.array(BURN, np.float32) * shade[..., None]
+    page = Image.alpha_composite(to_image(rgb, inside), fibres(w, h, 1600, 24, LEDGER, 0.07))
+    page.putalpha(Image.fromarray((inside * 255).astype(np.uint8)))
+
+    sheet = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    stack = ImageDraw.Draw(sheet)
+    for off in (16, 11, 6):                                                                      # the rest of the book peeking out
+        stack.rectangle([left + off, top + off, right + off, bottom + off], fill=(224, 212, 184, 255), outline=(150, 118, 84, 255))
+    sheet = Image.alpha_composite(sheet, page)
+    stitch = ImageDraw.Draw(sheet)
+    for yy in range(48, h - 60, 46):                                                             # binding thread
+        stitch.line([(24, yy), (24, yy + 24)], fill=(132, 96, 64, 210), width=3)
+        for hole in (yy - 2, yy + 26):
+            stitch.ellipse([21, hole - 3, 27, hole + 3], fill=(66, 44, 28, 230))
+    return sheet
+
+
+def cork_board():
+    """A notice board: speckled cork in a mitred wooden frame."""
+    w = h = 512
+    f = 40
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    dh = np.minimum(y, h - 1 - y)
+    dv = np.minimum(x, w - 1 - x)
+    edge = np.minimum(dh, dv)
+
+    speck = noise(w, h, 3, 2)
+    cork = np.dstack([np.full((h, w), c, np.float32) for c in (170, 122, 78)]) * (1 + (noise(w, h, 70, 3) - 0.5) * 0.3)[..., None]
+    cork *= (1 - 0.38 * smoothstep(0.58, 0.72, speck))[..., None]
+    cork += (26 * smoothstep(0.34, 0.22, speck))[..., None]
+    cork *= (1 - 0.5 * np.exp(-np.maximum(edge - f, 0) / 9))[..., None]                         # the frame's shadow on the cork
+
+    horizontal = grain(w, h)
+    vertical = grain(w, h, vertical=True)
+    g = np.where(dh <= dv, horizontal, vertical)                                                 # mitred corners
+    wood = np.dstack([np.full((h, w), c, np.float32) for c in WOOD]) * (0.72 + 0.5 * g)[..., None]
+    bevel = np.clip(1.25 - edge / f * 0.5, 0.75, 1.25)                                           # rounded outer edge
+    wood *= bevel[..., None]
+    mitre = np.abs(dh - dv) < 1.2
+    wood[mitre & (edge < f)] *= 0.6
+
+    rgb = np.where((edge < f)[..., None], wood, cork)
+    return to_image(rgb, np.ones((h, w), np.float32))
+
+
+def pin():
+    """A brass tack, lit from the top left, with a soft shadow."""
+    w = h = 64
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    cx, cy = 29, 28
+    r = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    shadow = smoothstep(18, 8, np.sqrt((x - cx - 4) ** 2 + (y - cy - 5) ** 2)) * 0.45
+    head = smoothstep(13.5, 12, r)
+    light = 1.25 - 0.6 * ((x - cx) + (y - cy)) / 26 - 0.25 * np.exp(-((r - 10) ** 2) / 4)
+    spot = np.exp(-(((x - cx + 4) ** 2 + (y - cy + 4) ** 2) / 10)) * 90
+    rgb = np.dstack([np.full((h, w), c, np.float32) for c in GOLD]) * light[..., None] + spot[..., None]
+    img = Image.alpha_composite(to_image(np.zeros((h, w, 3)), shadow), to_image(rgb, head))
+    return img
+
+
+def plank():
+    """A signpost board: wood with an arrow point on the left and two nails."""
+    w, h = 512, 96
+    shape = Image.new("L", (w * 4, h * 4), 0)
+    ImageDraw.Draw(shape).polygon([(8 * 4, h * 2), (58 * 4, 8 * 4), ((w - 8) * 4, 10 * 4), ((w - 6) * 4, (h - 8) * 4), (58 * 4, (h - 6) * 4)], fill=255)
+    alpha = np.asarray(shape.resize((w, h), Image.LANCZOS), np.float32) / 255
+    g = grain(w, h, 24)
+    y = np.mgrid[0:h, 0:w][0].astype(np.float32)
+    light = 0.7 + 0.5 * g + 0.18 * (1 - y / h) - 0.22 * (alpha < 0.98)
+    rgb = np.dstack([np.full((h, w), c, np.float32) for c in WOOD]) * light[..., None]
+    img = to_image(rgb, alpha)
+    nails = ImageDraw.Draw(img)
+    for ny in (26, h - 28):
+        nails.ellipse([w - 34, ny - 5, w - 24, ny + 5], fill=(58, 52, 48, 255))
+        nails.ellipse([w - 32, ny - 4, w - 28, ny], fill=(150, 140, 128, 255))
+    return img
+
+
+def ink_wash():
+    """A soft watercolour wash (white, tinted in code) for highlighting ledger lines."""
+    w, h = 256, 64
+    rough = noise(w, h, 22, 3) - 0.5
+    d = edge_distance(w, h) + rough * 12
+    alpha = smoothstep(4, 14, d) * (0.65 + 0.35 * noise(w, h, 30, 3))
+    alpha += np.exp(-np.abs(d - 9) / 2.5) * 0.25                                                 # pigment pools at the edge
+    return to_image(np.full((h, w, 3), 255, np.float32), np.clip(alpha, 0, 1))
+
+
+def banner():
+    """A cloth banner with forked, folded-back tails (white, tinted in code)."""
+    w, h = 1024, 192
+    s = 2
+    big = Image.new("RGBA", (w * s, h * s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    p = lambda pts: [(px * s, py * s) for px, py in pts]
+    for side in (1, -1):
+        ox = 0 if side == 1 else w
+        X = lambda v: ox + side * v
+        d.polygon(p([(X(8), 68), (X(214), 68), (X(214), 178), (X(8), 178), (X(62), 123)]), fill=(178, 178, 178, 255))   # tail
+        d.polygon(p([(X(160), 150), (X(214), 178), (X(214), 150)]), fill=(110, 110, 110, 255))                           # fold
+    d.rectangle(p([(160, 24), (w - 160, 150)]), fill=(255, 255, 255, 255))
+    img = big.resize((w, h), Image.LANCZOS)
+    a = np.asarray(img, np.float32)
+    y = np.mgrid[0:h, 0:w][0].astype(np.float32)
+    weave = 1 + (noise(w, h, 3, 2) - 0.5) * 0.12 + (noise(w, h, 90, 3) - 0.5) * 0.14
+    folds = 1 - 0.1 * np.sin(np.linspace(0, 9 * np.pi, w))[None, :] ** 2
+    light = (1.08 - 0.25 * (y / h)) * weave * folds
+    rgb = a[..., :3] * light[..., None]
+    return to_image(rgb, a[..., 3] / 255)
+
+
+def scroll_rod():
+    """A rolled-up end of a scroll with wooden knobs (vertical; rotate in code for horizontal)."""
+    w, h = 64, 256
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    roll = ((x >= 14) & (x <= 50) & (y >= 34) & (y <= h - 34)).astype(np.float32)
+    t = (x - 14) / 36
+    cyl = 0.55 + 0.6 * np.sin(np.clip(t, 0, 1) * np.pi) - 0.15 * t
+    paper_rgb = np.dstack([np.full((h, w), c, np.float32) for c in PARCHMENT]) * cyl[..., None]
+    knob = np.zeros((h, w), np.float32)
+    for k0, k1 in ((6, 38), (h - 38, h - 6)):
+        knob = np.maximum(knob, ((x >= 10) & (x <= 54) & (y >= k0) & (y <= k1)).astype(np.float32))
+    kt = (x - 10) / 44
+    wood = np.dstack([np.full((h, w), c, np.float32) for c in (92, 58, 32)]) * (0.55 + 0.7 * np.sin(np.clip(kt, 0, 1) * np.pi))[..., None]
+    rgb = np.where(knob[..., None] > 0, wood, paper_rgb)
+    alpha = np.maximum(roll, knob)
+    return to_image(rgb, alpha).filter(ImageFilter.GaussianBlur(0.5))
+
+
+def tag():
+    """A parchment hang tag with clipped top corners (for the name tags over characters)."""
+    w, h = 512, 256
+    img = paper(w, h, SLIP, margin=5, deckle=2.5, burn_width=16, burn_strength=0.4, mottling=0.06, fibre_count=300)
+    shape = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(shape).polygon([(44, 4), (w - 44, 4), (w - 4, 44), (w - 4, h - 4), (4, h - 4), (4, 44)], fill=255)
+    shape = shape.filter(ImageFilter.GaussianBlur(0.8))
+    alpha = np.minimum(np.asarray(img, np.float32)[..., 3], np.asarray(shape, np.float32))
+    img.putalpha(Image.fromarray(alpha.astype(np.uint8)))
+    return img
+
+
+def eyelet():
+    """A brass eyelet (the tag's string hole)."""
+    w = h = 64
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    r = np.sqrt((x - 32) ** 2 + (y - 32) ** 2)
+    ring = smoothstep(23, 21.5, r) * smoothstep(10, 11.5, r)
+    light = 1.2 - 0.5 * ((x - 32) + (y - 32)) / 40 + 0.25 * np.exp(-((r - 16) ** 2) / 6)
+    rgb = np.dstack([np.full((h, w), c, np.float32) for c in GOLD]) * light[..., None]
+    return to_image(rgb, ring)
+
+
+def ink_box():
+    """A hand-drawn ink outline for bars (HP and the like)."""
+    w, h = 128, 40
+
+    def draw(d, s):
+        jitter = lambda: rng.normal(0, 0.6) * s
+        pts = [(6 * s, 7 * s), ((w - 6) * s, 6 * s), ((w - 7) * s, (h - 6) * s), (6 * s, (h - 7) * s)]
+        for i in range(4):
+            a, b = pts[i], pts[(i + 1) % 4]
+            d.line([(a[0] + jitter(), a[1] + jitter()), (b[0] + jitter(), b[1] + jitter())], fill=INK + (235,), width=int(2.6 * s))
+
+    return supersampled(w, h, 4, draw)
 
 
 # ── Output ──────────────────────────────────────────────────────────────────
@@ -338,6 +534,18 @@ ART = {
     "WaxSeal": (wax_seal, (0, 0, 0, 0)),
     "Coin": (coin, (0, 0, 0, 0)),
     "Vignette": (vignette, (0, 0, 0, 0)),
+    # appended after the originals so the shared random stream leaves the earlier images unchanged
+    "LedgerPage": (ledger_page, (128, 128, 128, 128)),
+    "CorkBoard": (cork_board, (64, 64, 64, 64)),
+    "Pin": (pin, (0, 0, 0, 0)),
+    "Plank": (plank, (64, 24, 48, 24)),
+    "InkWash": (ink_wash, (28, 20, 28, 20)),
+    "Banner": (banner, (220, 40, 220, 40)),
+    "ScrollRod": (scroll_rod, (0, 56, 0, 56)),
+    "Tag": (tag, (56, 56, 56, 56)),
+    "Eyelet": (eyelet, (0, 0, 0, 0)),
+    "InkBox": (ink_box, (12, 12, 12, 12)),
+    "WaxDisc": (lambda: wax_seal(blank=True), (0, 0, 0, 0)),
 }
 
 

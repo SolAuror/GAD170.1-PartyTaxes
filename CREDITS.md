@@ -14,5 +14,6 @@ All fonts are licensed under the SIL Open Font License 1.1; each licence ships b
 Fonts were sourced from the Google Fonts repository (github.com/google/fonts).
 
 ## UI art
-The parchment, paper slip, wax slip, ink divider, rubber stamp, wax seal, coin and vignette images in
-`Assets/PartyTaxes/Resources/PartyTaxes/UI` were generated for this project by `Tools/UIArt/generate_ui_art.py`.
+Every image in `Assets/PartyTaxes/Resources/PartyTaxes/UI` (parchment, paper slip, wax slip, ink divider, rubber stamp,
+wax seal and disc, coin, vignette, ledger page, cork notice board, brass tack, signpost plank, ink wash, cloth banner,
+scroll rods, hang tag, eyelet and ink box) was generated for this project by `Tools/UIArt/generate_ui_art.py`.

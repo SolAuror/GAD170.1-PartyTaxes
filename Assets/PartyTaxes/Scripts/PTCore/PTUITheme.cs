@@ -29,6 +29,16 @@ namespace PartyTaxes
         public static readonly Color StampRed   = new Color(0.56f, 0.11f, 0.11f, 0.85f);
         public static readonly Color StampGreen = new Color(0.18f, 0.36f, 0.16f, 0.85f);
         public static readonly Color LedgerRule = new Color(0.56f, 0.11f, 0.11f, 0.35f);
+        public static readonly Color LedgerLine = new Color(0.27f, 0.36f, 0.48f, 0.35f);           // the faint blue ruling under each entry
+        public static readonly Color MarginRed  = new Color(0.66f, 0.16f, 0.14f, 0.55f);           // the ledger's double margin line
+        public static readonly Color Highlight  = new Color(0.86f, 0.66f, 0.26f, 1f);              // ochre wash behind a hovered entry
+        public static readonly Color Painted    = new Color(0.95f, 0.88f, 0.70f, 1f);              // lettering painted on wood
+        public static readonly Color BannerTown = new Color(0.24f, 0.33f, 0.48f, 1f);
+        public static readonly Color BannerWar  = new Color(0.60f, 0.12f, 0.12f, 1f);
+        public static readonly Color Twine      = new Color(0.40f, 0.30f, 0.20f, 0.9f);            // twine
+        public static readonly Color BountyTint = new Color(0.86f, 0.70f, 0.60f, 1f);              // enemies' tags are wanted notices
+        public static readonly Color HealthInk  = new Color(0.62f, 0.13f, 0.12f, 0.9f);
+        public static readonly Color XpInk      = new Color(0.62f, 0.45f, 0.10f, 0.9f);
 
         // Rich-text inks for <color=...> tags, dark enough to read on parchment
         public const string RedInk    = "#8E1B1B";                                                    // losses, theft, danger
@@ -41,7 +51,16 @@ namespace PartyTaxes
 
         public static string Tint(string text, string hex) => "<color=" + hex + ">" + text + "</color>";
 
-        // ── Sprites (9-slice borders in texture pixels; must match generate_ui_art.py) ──
+        /// Tally marks, five to a gate (the gate is struck through), e.g. for days served.
+        public static string Tally(int count)
+        {
+            System.Text.StringBuilder marks = new System.Text.StringBuilder();
+            for (int gate = 0; gate < count / 5; gate++) marks.Append("<s>||||</s> ");
+            marks.Append(new string('|', count % 5));
+            return marks.ToString().TrimEnd();
+        }
+
+        // ── Sprites (9-slice borders in texture pixels: left, bottom, right, top; must match generate_ui_art.py) ──
         public static Sprite PaperPanel => LoadSprite("PaperPanel", 128f);
         public static Sprite PaperSlip  => LoadSprite("PaperSlip", 40f);
         public static Sprite WaxSlip    => LoadSprite("WaxSlip", 40f);
@@ -50,16 +69,29 @@ namespace PartyTaxes
         public static Sprite WaxSeal    => LoadSprite("WaxSeal", 0f);
         public static Sprite Coin       => LoadSprite("Coin", 0f);
         public static Sprite Vignette   => LoadSprite("Vignette", 0f);
+        public static Sprite LedgerPage => LoadSprite("LedgerPage", 128f);
+        public static Sprite CorkBoard  => LoadSprite("CorkBoard", 64f);
+        public static Sprite Pin        => LoadSprite("Pin", 0f);
+        public static Sprite Plank      => LoadSprite("Plank", new Vector4(64f, 24f, 48f, 24f));
+        public static Sprite InkWash    => LoadSprite("InkWash", new Vector4(28f, 20f, 28f, 20f));
+        public static Sprite Banner     => LoadSprite("Banner", new Vector4(220f, 40f, 220f, 40f));
+        public static Sprite ScrollRod  => LoadSprite("ScrollRod", new Vector4(0f, 56f, 0f, 56f));
+        public static Sprite Tag        => LoadSprite("Tag", 56f);
+        public static Sprite Eyelet     => LoadSprite("Eyelet", 0f);
+        public static Sprite InkBox     => LoadSprite("InkBox", 12f);
+        public static Sprite WaxDisc    => LoadSprite("WaxDisc", 0f);
 
         private static readonly Dictionary<string, Sprite> sprites = new Dictionary<string, Sprite>();
 
-        private static Sprite LoadSprite(string name, float border)
+        private static Sprite LoadSprite(string name, float border) => LoadSprite(name, new Vector4(border, border, border, border));
+
+        private static Sprite LoadSprite(string name, Vector4 border)
         {
             Sprite sprite;
             if (sprites.TryGetValue(name, out sprite) && sprite != null) return sprite;
             Texture2D texture = Resources.Load<Texture2D>(ArtPath + name);
             sprite = texture == null ? null : Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f),
-                                                            100f, 0, SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+                                                            100f, 0, SpriteMeshType.FullRect, border);
             sprites[name] = sprite;
             return sprite;
         }

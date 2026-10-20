@@ -31,7 +31,7 @@ You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-
 
 ## Controls
 
-Every action has a clickable button in the **action bar** on the right of the screen (showing costs and what's available right now). Choosing jobs, hiring, payroll, audits and firing are mouse-only, from the **Job board**, **Tavern** and **Ledger** views. The keyboard shortcuts below still work. Combat plays itself; in battle the same keys trigger gold-spending interventions.
+The UI is diegetic: it's made of things the accountant owns or sees (see [Docs/UI_Diegetic.md](Docs/UI_Diegetic.md)). Your **ledger book** sits on the right; every action is a line entry you can click, with its hotkey in the margin and its cost in the debit column. The **signpost** beside it takes you around town: **Town Square** (the ledger), **Notice Board** (contracts), **Tavern** (hiring) and **Counting House** (payroll, audits, firing). Choosing jobs, hiring, payroll, audits and firing are mouse-only. The keyboard shortcuts below still work. Combat plays itself; in battle the ledger lists field expenses, and the same keys trigger them.
 
 ### Town
 | Key | Action |
@@ -215,7 +215,10 @@ The central game controller. Owns all shared state (gold, party list, enemy list
 Each input callback (`OnSleep`, `OnHeal`, ...) is a one-line wrapper around its `Try...` method, so keyboard and buttons share the same logic.
 
 ### `PTActionBar`
-Builds its own overlay canvas at runtime (no scene setup needed; turn it off with `buildActionBar` on PTManager). Views: **Main** (town actions, stance), **Job board**, **Tavern** (hiring board), **Ledger** (payroll toggles, audits, firing), and **Combat** (interventions, speed). A caught thief forces the confrontation choice. `PTManager.UpdateUI()` calls `Refresh()`, which re-reads every label, cost and availability. Opens the Final Ledger when the run ends.
+Builds its own overlay canvas at runtime (no scene setup needed; turn it off with `buildActionBar` on PTManager), drawn as the accountant's ledger book with a town signpost beside it. Views: **Town Square** (ledger entries: stance, heal, bless, resurrect, then the wax "close the books & sleep"), **Notice Board** (contracts tacked to cork), **Tavern** (people seeking work, same board), **Counting House** (payroll toggles, audits, firing) and, in battle, **Field Expenses** (interventions, speed). Decisions arrive as documents (an incident report for a caught thief, a petition for a raise, a letter for night events) and must be answered first. `PTManager.UpdateUI()` calls `Refresh()`, which re-reads every label, cost and availability. Opens the Final Ledger when the run ends.
+
+### `PTWorldTag`
+The paper tag tied over each character's head, built in world space at runtime: level on a wax seal, name, HP as red ink in a hand-drawn box, a thin XP line, and for hires their wage and mood; enemies get a ruddy wanted notice. It hides the prefab's UI_PTInWorld canvas and takes over PTSoul's UI fields, so `PTSoul.UpdateUI()` keeps driving it. It follows its soul, faces the camera, hides while the soul is off-stage and fades when they fall.
 
 ### `PTFinalLedgerPanel` / `PTUIFactory` / `PTUITheme`
 The end-of-run books (outcome stamped across the top, score, totals, a ruled per-hire table, biggest thief). `PTUIFactory` holds the shared runtime UI helpers (canvas, parchment panel, row, label, heading, title, divider, paper and wax-seal buttons, stamp, ornaments) so all generated UI looks the same, and restyles the HUD prefab's texts onto paper labels at start.
@@ -223,7 +226,7 @@ The end-of-run books (outcome stamped across the top, score, totals, a ruled per
 `PTUITheme` is the look: ink colours (including the rich-text inks used in the log and labels, chosen to read on parchment), fonts and sprites. Fonts are made into dynamic TMP font assets at runtime from the TTFs in `Resources/PartyTaxes/UI/Fonts`, so there's no editor step; if a font or texture is missing, the UI falls back to TMP's default font and flat paper colours.
 
 - **Fonts (SIL OFL 1.1):** Crimson Text (body, with bold and italic), IM Fell English SC (headers, HUD), Pirata One (titles).
-- **Art:** `Tools/UIArt/generate_ui_art.py` (Python, numpy and Pillow) draws the parchment, paper slip, wax slip, ink divider, rubber stamp, wax seal, coin and vignette. It's seeded, so re-running reproduces the same images, and it keeps existing `.meta` files so GUIDs don't change. The 9-slice borders it prints must match `PTUITheme`.
+- **Art:** `Tools/UIArt/generate_ui_art.py` (Python, numpy and Pillow) draws the parchment, paper slip, wax slip, ink divider, rubber stamp, wax seal and disc, coin, vignette, ledger page, cork notice board, brass tack, signpost plank, ink wash, cloth banner, scroll rods, hang tag, eyelet and ink box. It's seeded, so re-running reproduces the same images, and it keeps existing `.meta` files so GUIDs don't change. The 9-slice borders it prints must match `PTUITheme`.
 
 ### `PTContent`, `PTTrait`, `PTNightEvent` (Data)
 `PTContent` loads `Resources/PartyTaxes/Traits.json` and `Events.json` with `JsonUtility`. **The balance sim reads the same files**, so content edits are immediately reflected in the tuning numbers. Trait fields are additive modifiers (missing = no effect); `special` names the few behaviours that need code.
@@ -238,7 +241,7 @@ A contract: name, description, risk, first day, weight, enemy count (× party si
 A party member's employment file: loyalty, hidden greed, payroll toggle, nights unpaid, theft (total and unrecovered), kills, loot, wages received, deaths, and status/fate. Held on `PTSoul.employment` (runtime only) and in `PTManager.runLedger`, so the books keep everyone ever hired. It travels with `DeadCharacterData`, so a resurrected hero keeps their history.
 
 ### `PTSoul`
-Represents a single character — party member or enemy. Owns stats (HP, attack, defense, level, XP, wages) and status flags (`isCowardly`, `markedByDeath`, `isAdversary`). Handles its own damage, healing, blessing, XP, and level-up logic, and drives its own UI elements (name, health bar, XP bar). `PTManager` holds lists of `PTSoul` instances and calls into them to run gameplay.
+Represents a single character — party member or enemy. Owns stats (HP, attack, defense, level, XP, wages) and status flags (`isCowardly`, `markedByDeath`, `isAdversary`). Handles its own damage, healing, blessing, XP, and level-up logic, and drives its own UI elements (name, health bar, XP bar), which `PTWorldTag` supplies. `PTManager` holds lists of `PTSoul` instances and calls into them to run gameplay.
 
 ### `PTSoulGen`
 Centralized character generation system that creates both party members and enemies. Uses ScriptableObject data assets (PTSoulTypeData) to define races with configurable attribute ranges, level brackets, and rewards. Handles name generation with optional prefixes ("Mighty Salen the Dwarf"), stat randomization, and smart enemy scaling based on party level.
