@@ -8,6 +8,8 @@ You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-
 
 - **Engine:** Unity 6000.6.4f1 (Unity 6.6; upgraded from 6000.3.9f1)
   - *First open after the upgrade:* Unity re-imports the project, updates the built-in packages (URP, uGUI, Test Framework, Multiplayer Center) and `packages-lock.json`, and adds the editor revision to `ProjectSettings/ProjectVersion.txt`. Commit those generated changes. Scripts avoid the InstanceID-era APIs that became errors in 6.5 (`FindAnyObjectByType` instead of `FindFirstObjectByType`).
+  - *Packages:* Input System 1.20.1 (1.18 and older fail to compile on 6.5+ because of the InstanceID to EntityId change). The Unity Version Control package (`com.unity.collab-proxy`) was removed for the same reason; the project uses Git. A compile error in any package stops every script loading, which shows up as magenta URP materials, so check the Console for compile errors first.
+  - *TextMesh Pro:* the Examples & Extras folder was removed (its assets were too old for Unity 6.6). The two colour-gradient presets the UI uses now live in `Assets/PartyTaxes/UI/Gradients`. If TMP ever warns about its essential resources, use *Window > TextMeshPro > Import TMP Essential Resources*.
 - **Input:** Unity Input System package
 - **UI:** TextMesh Pro
 
