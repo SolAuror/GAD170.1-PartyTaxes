@@ -67,5 +67,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "GAD170-1-PartyTaxes.slnx"
+    "dotnet.defaultSolution": "party-taxes.slnx"
 }
