@@ -65,7 +65,7 @@ public partial class PTManager
 
         if (daysElapsed == RESURRECTION_UNLOCK_DAY)                                                      //on the 7th day, unlock resurrection
         {
-            PTAdventureLog.Log("<color=purple>You feel an ominous presence in town, the souls of the dead are restless...</color>");
+            PTAdventureLog.Log(PTUITheme.Tint("You feel an ominous presence in town, the souls of the dead are restless...", PTUITheme.PurpleInk));
         }
 
         SetSunIntensity(2f);

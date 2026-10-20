@@ -13,6 +13,7 @@ namespace UnityEngine
     {
         public static T Load<T>(string path) where T : Object
         {
+            if (typeof(T) != typeof(TextAsset)) return null;                     // fonts and textures: the game falls back to defaults
             string dir = AppContext.BaseDirectory;
             while (dir != null && !Directory.Exists(Path.Combine(dir, "Assets"))) dir = Path.GetDirectoryName(dir);
             if (dir == null) return null;

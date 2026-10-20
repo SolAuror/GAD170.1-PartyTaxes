@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using PartyTaxes;
 
 public class PTAdventureLog : MonoBehaviour
 {
@@ -58,6 +59,9 @@ public class PTAdventureLog : MonoBehaviour
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         }
 
+        logTextColor = PTUITheme.Ink;                                                           //ink on the parchment log strip (the colours below are inks too)
+        PTUIFactory.StyleLog(logScrollRect, logText);
+
         if (useVerticalLayoutEntries && logText != null)                                        //use the verticallayoutentries option to create a template entry for visual log entries, and disable the original text component.
         {
             entryTemplate = logText;
@@ -77,35 +81,35 @@ public class PTAdventureLog : MonoBehaviour
         if (string.IsNullOrEmpty(message)) return message;
 
         // Colourize gold amounts
-        message = Regex.Replace(message, @"(\d+)\s*(gold)", "<color=#FFD700>$1 $2</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"(\d+)\s*(gold)", "<color=" + PTUITheme.GoldInk + ">$1 $2</color>", RegexOptions.IgnoreCase);
         
         // Colourize daily wages amount
-        message = Regex.Replace(message, @"(Daily Wages are\s+)(\d+)", "$1<color=#FFD700>$2</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"(Daily Wages are\s+)(\d+)", "$1<color=" + PTUITheme.GoldInk + ">$2</color>", RegexOptions.IgnoreCase);
 
         // Colourize HP amounts
-        message = Regex.Replace(message, @"(\d+(?:/\d+)?)\s*(HP)", "<color=#00FF00>$1 $2</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"(\d+(?:/\d+)?)\s*(HP)", "<color=" + PTUITheme.GreenInk + ">$1 $2</color>", RegexOptions.IgnoreCase);
 
-        message = Regex.Replace(message, @"(healing|healed|heal|life|cleric)", "<color=#00FF00>$1</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"(healing|healed|heal|life|cleric)", "<color=" + PTUITheme.GreenInk + ">$1</color>", RegexOptions.IgnoreCase);
 
         //colourize party name markers
-        message = Regex.Replace(message, @"<partyname>(.*?)</partyname>", "<color=#31FFFD>$1</color>");
+        message = Regex.Replace(message, @"<partyname>(.*?)</partyname>", "<color=" + PTUITheme.BlueInk + ">$1</color>");
 
         //colourize party member join messages
-        message = Regex.Replace(message, @"^(.+?)\s+joined\s+(.+?)!$", "<color=#31FFFD>$1</color> joined <color=#31FFFD>$2</color>!", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"^(.+?)\s+joined\s+(.+?)!$", "<color=" + PTUITheme.BlueInk + ">$1</color> joined <color=" + PTUITheme.BlueInk + ">$2</color>!", RegexOptions.IgnoreCase);
 
         //colourize resurrection messages
-        message = Regex.Replace(message, @"\b(resurrected|resurrection|resurrect)\b", "<color=purple>$1</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"\b(resurrected|resurrection|resurrect)\b", "<color=" + PTUITheme.PurpleInk + ">$1</color>", RegexOptions.IgnoreCase);
 
-        message = Regex.Replace(message, @"\b(coward|cowardly|Cowardice|run away)\b", "<color=#C57A00>$1</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"\b(coward|cowardly|Cowardice|run away)\b", "<color=" + PTUITheme.BrownInk + ">$1</color>", RegexOptions.IgnoreCase);
 
         //colourize enemy name markers
-        message = Regex.Replace(message, @"(\d+\s)?<enemy>(.*?)</enemy>(s?)", "<color=#DC143C>$1$2$3</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"(\d+\s)?<enemy>(.*?)</enemy>(s?)", "<color=" + PTUITheme.RedInk + ">$1$2$3</color>", RegexOptions.IgnoreCase);
 
         //colourize death messages
-        message = Regex.Replace(message, @"\bMysterious Stranger\b", "<color=purple>$0</color>", RegexOptions.IgnoreCase);
-        message = Regex.Replace(message, @"\bMarked by Death\b", "<color=purple>$0</color>", RegexOptions.IgnoreCase);
-        message = Regex.Replace(message, @"The Dark Ritual Begins\.\.\.", "<color=purple>$0</color>", RegexOptions.IgnoreCase);
-        message = Regex.Replace(message, @"\b(dead|died|death)\b", "<color=purple>$1</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"\bMysterious Stranger\b", "<color=" + PTUITheme.PurpleInk + ">$0</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"\bMarked by Death\b", "<color=" + PTUITheme.PurpleInk + ">$0</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"The Dark Ritual Begins\.\.\.", "<color=" + PTUITheme.PurpleInk + ">$0</color>", RegexOptions.IgnoreCase);
+        message = Regex.Replace(message, @"\b(dead|died|death)\b", "<color=" + PTUITheme.PurpleInk + ">$1</color>", RegexOptions.IgnoreCase);
         return message;
     }
 

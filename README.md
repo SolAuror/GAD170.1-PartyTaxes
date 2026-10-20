@@ -11,7 +11,7 @@ You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-
   - *Packages:* Input System 1.20.1 (1.18 and older fail to compile on 6.5+ because of the InstanceID to EntityId change). The Unity Version Control package (`com.unity.collab-proxy`) was removed for the same reason; the project uses Git. A compile error in any package stops every script loading, which shows up as magenta URP materials, so check the Console for compile errors first.
   - *TextMesh Pro:* the Examples & Extras folder was removed (its assets were too old for Unity 6.6). The two colour-gradient presets the UI uses now live in `Assets/PartyTaxes/UI/Gradients`. If TMP ever warns about its essential resources, use *Window > TextMeshPro > Import TMP Essential Resources*.
 - **Input:** Unity Input System package
-- **UI:** TextMesh Pro
+- **UI:** TextMesh Pro, paper-and-ink theme (`PTUITheme`): OFL fonts and procedurally generated art in `Assets/PartyTaxes/Resources/PartyTaxes/UI`; see [CREDITS.md](CREDITS.md)
 
 ---------------------------------------------------------------------------------------
 
@@ -217,8 +217,13 @@ Each input callback (`OnSleep`, `OnHeal`, ...) is a one-line wrapper around its 
 ### `PTActionBar`
 Builds its own overlay canvas at runtime (no scene setup needed; turn it off with `buildActionBar` on PTManager). Views: **Main** (town actions, stance), **Job board**, **Tavern** (hiring board), **Ledger** (payroll toggles, audits, firing), and **Combat** (interventions, speed). A caught thief forces the confrontation choice. `PTManager.UpdateUI()` calls `Refresh()`, which re-reads every label, cost and availability. Opens the Final Ledger when the run ends.
 
-### `PTFinalLedgerPanel` / `PTUIFactory`
-The end-of-run books (outcome, score, totals, per-hire table, biggest thief). `PTUIFactory` holds the shared runtime UI helpers (canvas, panel, row, label, button) so all generated UI looks the same.
+### `PTFinalLedgerPanel` / `PTUIFactory` / `PTUITheme`
+The end-of-run books (outcome stamped across the top, score, totals, a ruled per-hire table, biggest thief). `PTUIFactory` holds the shared runtime UI helpers (canvas, parchment panel, row, label, heading, title, divider, paper and wax-seal buttons, stamp, ornaments) so all generated UI looks the same, and restyles the HUD prefab's texts onto paper labels at start.
+
+`PTUITheme` is the look: ink colours (including the rich-text inks used in the log and labels, chosen to read on parchment), fonts and sprites. Fonts are made into dynamic TMP font assets at runtime from the TTFs in `Resources/PartyTaxes/UI/Fonts`, so there's no editor step; if a font or texture is missing, the UI falls back to TMP's default font and flat paper colours.
+
+- **Fonts (SIL OFL 1.1):** Crimson Text (body, with bold and italic), IM Fell English SC (headers, HUD), Pirata One (titles).
+- **Art:** `Tools/UIArt/generate_ui_art.py` (Python, numpy and Pillow) draws the parchment, paper slip, wax slip, ink divider, rubber stamp, wax seal, coin and vignette. It's seeded, so re-running reproduces the same images, and it keeps existing `.meta` files so GUIDs don't change. The 9-slice borders it prints must match `PTUITheme`.
 
 ### `PTContent`, `PTTrait`, `PTNightEvent` (Data)
 `PTContent` loads `Resources/PartyTaxes/Traits.json` and `Events.json` with `JsonUtility`. **The balance sim reads the same files**, so content edits are immediately reflected in the tuning numbers. Trait fields are additive modifiers (missing = no effect); `special` names the few behaviours that need code.

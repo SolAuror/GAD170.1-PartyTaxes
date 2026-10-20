@@ -16,7 +16,7 @@ namespace PartyTaxes
 
         public static PTFinalLedgerPanel Show(PTManager manager)
         {
-            RectTransform canvas = PTUIFactory.CreateCanvas("PT Final Ledger", 20);
+            RectTransform canvas = PTUIFactory.CreateCanvas("PT Final Ledger", 20, true);
             PTFinalLedgerPanel ledger = canvas.gameObject.AddComponent<PTFinalLedgerPanel>();
             ledger.Build(canvas, manager);
             return ledger;
@@ -24,11 +24,13 @@ namespace PartyTaxes
 
         private void Build(RectTransform canvas, PTManager manager)
         {
-            RectTransform panel = PTUIFactory.CreatePanel("Panel", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth, 24, 10f);
+            RectTransform panel = PTUIFactory.CreatePanel("Panel", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth, 48, 10f);
 
-            TextMeshProUGUI title = PTUIFactory.CreateLabel("Title", panel, 46f, TextAlignmentOptions.Center, 60f);
-            title.fontStyle = FontStyles.Bold;
-            title.text = "The Final Ledger: " + manager.RunOutcome;
+            TextMeshProUGUI title = PTUIFactory.CreateTitle("Title", panel, 60f, 70f);
+            title.text = "The Final Ledger";
+            PTUIFactory.CreateStamp(panel, manager.RunOutcome, manager.State == PTManager.GameState.Victory ? PTUITheme.StampGreen : PTUITheme.StampRed,
+                                    new Vector2(1f, 1f), new Vector2(-136f, -126f), new Vector2(260f, 104f), 9f);
+            PTUIFactory.CreateDivider(panel);
 
             TextMeshProUGUI subtitle = PTUIFactory.CreateLabel("Subtitle", panel, 24f, TextAlignmentOptions.Center, 34f);
             subtitle.text = "Day " + manager.daysElapsed + " of " + manager.RunLengthDays + "  ·  Score " + manager.RunScore;
@@ -40,7 +42,7 @@ namespace PartyTaxes
             if (manager.RunUnlocks.Count > 0)
             {
                 TextMeshProUGUI unlocks = PTUIFactory.CreateLabel("Unlocks", panel, 22f, TextAlignmentOptions.Center, 30f * manager.RunUnlocks.Count);
-                unlocks.text = "<color=#FFD700>" + string.Join("\n", manager.RunUnlocks) + "</color>";
+                unlocks.text = "<color=" + PTUITheme.GoldInk + ">" + string.Join("\n", manager.RunUnlocks) + "</color>";
             }
 
             TextMeshProUGUI totals = PTUIFactory.CreateLabel("Totals", panel, 20f, TextAlignmentOptions.Left, 110f);
@@ -48,12 +50,13 @@ namespace PartyTaxes
 
             TextMeshProUGUI table = PTUIFactory.CreateLabel("Books", panel, 18f, TextAlignmentOptions.TopLeft, 40f + 26f * manager.runLedger.Count);
             table.text = BuildTable(manager);
+            PTUIFactory.AddColumnRules(table.rectTransform, new[] { 0.36f, 0.44f, 0.54f, 0.64f, 0.73f });   // the <pos=> columns in BuildTable
 
             TextMeshProUGUI highlights = PTUIFactory.CreateLabel("Highlights", panel, 20f, TextAlignmentOptions.Center, 56f);
             highlights.text = BuildHighlights(manager);
 
             TextMeshProUGUI restartLabel;
-            PTUIFactory.CreateButton(panel, 46f, manager.RestartRun, out restartLabel);
+            PTUIFactory.CreateButton(panel, 50f, manager.RestartRun, out restartLabel, PTButtonStyle.Wax);
             restartLabel.text = "Start a new run  [Esc]";
         }
 
@@ -65,7 +68,7 @@ namespace PartyTaxes
                 .Append("<pos=50%>Gold left in your purse: <b>").Append(manager.gold).Append("g</b>\n");
             text.Append("Wages paid: ").Append(manager.TotalWagesPaid).Append("g")
                 .Append("<pos=50%>Severance paid: ").Append(manager.TotalSeverancePaid).Append("g\n");
-            text.Append("Stolen from you: <color=#FF8080>").Append(manager.TotalStolen).Append("g</color>")
+            text.Append("Stolen from you: <color=").Append(PTUITheme.RedInk).Append(">").Append(manager.TotalStolen).Append("g</color>")
                 .Append("<pos=50%>Recovered by audits: ").Append(manager.TotalRecovered).Append("g\n");
             text.Append("Heroes hired: ").Append(manager.runLedger.Count)
                 .Append("<pos=50%>Deaths: ").Append(deaths).Append("  ·  Strikes: ").Append(manager.TributeStrikes);
@@ -75,7 +78,7 @@ namespace PartyTaxes
         private static string BuildTable(PTManager manager)
         {
             StringBuilder text = new StringBuilder();
-            text.Append("<b>Name<pos=36%>Kills<pos=44%>Looted<pos=54%>Wages<pos=64%>Stole<pos=73%>Fate</b>\n");
+            text.Append("<b><u>Name<pos=36%>Kills<pos=44%>Looted<pos=54%>Wages<pos=64%>Stole<pos=73%>Fate</u></b>\n");
             foreach (PTEmployeeRecord record in manager.runLedger)
             {
                 string fate = record.IsEmployed ? "Still with you (" + record.Mood + ")" : record.fate;
@@ -83,7 +86,7 @@ namespace PartyTaxes
                     .Append("<pos=36%>").Append(record.kills)
                     .Append("<pos=44%>").Append(record.goldLooted).Append("g")
                     .Append("<pos=54%>").Append(record.wagesReceived).Append("g")
-                    .Append("<pos=64%>").Append(record.stolenTotal > 0 ? "<color=#FF8080>" + record.stolenTotal + "g</color>" : "-")
+                    .Append("<pos=64%>").Append(record.stolenTotal > 0 ? "<color=" + PTUITheme.RedInk + ">" + record.stolenTotal + "g</color>" : "-")
                     .Append("<pos=73%>").Append(fate).Append("\n");
             }
             return text.ToString();

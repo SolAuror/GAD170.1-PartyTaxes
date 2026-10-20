@@ -163,6 +163,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         }
 
         soulGen = GetComponent<PTSoulGen>();                                                             //get the soul generator component
+        StyleHud();                                                                                      //paper labels for the HUD prefab's texts
         if (buildActionBar)
         {
             actionBar = PTActionBar.Create(this);                                                        //build the clickable action buttons
@@ -216,7 +217,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         if (goldText != null)
         {
             goldText.text = "Gold: " + gold;                                                                //display current gold
-            goldText.color = (gold < PayrollTonight || UnpaidLastNight > 0) ? Color.red : new Color(1f, 0.84f, 0f); //tint red when you can't cover tonight's payroll or someone went unpaid
+            goldText.color = (gold < PayrollTonight || UnpaidLastNight > 0) ? PTUITheme.InkRed : PTUITheme.Ink; //red ink when you can't cover tonight's payroll or someone went unpaid
         }
         
         if (battleText != null)
@@ -246,6 +247,17 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         {
             actionBar.Refresh();                                                                         //update action button labels, costs and availability
         }
+    }
+
+    void StyleHud()                                                                                      //Method to restyle the HUD prefab in the paper-and-ink theme (see PTUITheme)
+    {
+        const float edge = 24f;                                                                          //gap from the screen edges
+        const float bottomRow = 236f;                                                                    //party, gold and day sit just above the adventure log
+        PTUIFactory.WrapInPlate(controlsText, new Vector2(0f, 1f), new Vector2(edge, -edge), PTUITheme.Body, 22f);
+        PTUIFactory.WrapInPlate(battleText, new Vector2(0.5f, 1f), new Vector2(0f, -edge), PTUITheme.Heading, 30f);
+        PTUIFactory.WrapInPlate(PartyNameText, new Vector2(0f, 0f), new Vector2(edge, bottomRow), PTUITheme.Heading, 28f);
+        PTUIFactory.WrapInPlate(goldText, new Vector2(0.5f, 0f), new Vector2(0f, bottomRow), PTUITheme.Body, 30f, PTUITheme.Coin);
+        PTUIFactory.WrapInPlate(dayText, new Vector2(1f, 0f), new Vector2(-edge, bottomRow), PTUITheme.Heading, 28f);
     }
 
     void UpdateControlsDisplay()                                                                         //Method to update controls display based on context

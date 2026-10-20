@@ -10,9 +10,10 @@ namespace UnityEngine
     public class MonoBehaviour : Behaviour { public static bool RunCoroutines = true; public Coroutine StartCoroutine(IEnumerator e) { int guard = 0; if (RunCoroutines) while (guard++ < 1000000 && e.MoveNext()) { } return new Coroutine(); } public void StopAllCoroutines() {} public void StopCoroutine(Coroutine c) {} }
     public class ScriptableObject : Object { public static T CreateInstance<T>() where T : ScriptableObject => default; }
     public sealed class GameObject : Object { public GameObject() {} public GameObject(string n, params Type[] c) {} public Transform transform; public bool activeSelf; public bool activeInHierarchy; public void SetActive(bool b) {} public T GetComponent<T>() => default; public T AddComponent<T>() where T : Component => default; public T GetComponentInChildren<T>() => default; public int layer; }
-    public class Transform : Component, IEnumerable { public Vector3 position, localPosition, localScale; public Quaternion rotation, localRotation; public Transform parent; public int childCount; public Transform GetChild(int i) => null; public void SetParent(Transform p, bool w = true) {} public void SetAsLastSibling() {} public void SetAsFirstSibling() {} public IEnumerator GetEnumerator() => null; }
+    public class Transform : Component, IEnumerable { public Vector3 position, localPosition, localScale; public Quaternion rotation, localRotation; public Transform parent; public int childCount; public Transform GetChild(int i) => null; public void SetParent(Transform p, bool w = true) {} public void SetAsLastSibling() {} public void SetAsFirstSibling() {} public int GetSiblingIndex() => 0; public void SetSiblingIndex(int i) {} public IEnumerator GetEnumerator() => null; }
     public class RectTransform : Transform { public Vector2 anchorMin, anchorMax, pivot, anchoredPosition, sizeDelta, offsetMin, offsetMax; public Rect rect; }
-    public struct Rect { public float width, height, x, y; }
+    public struct Rect { public float width, height, x, y; public Rect(float x, float y, float w, float h) { this.x = x; this.y = y; width = w; height = h; } }
+    public struct Vector4 { public float x, y, z, w; public Vector4(float x, float y, float z, float w) { this.x = x; this.y = y; this.z = z; this.w = w; } }
     public struct Vector2 { public float x, y; public Vector2(float x, float y) { this.x = x; this.y = y; } public static Vector2 zero, one; public static Vector2 operator *(Vector2 a, float b) => a; }
     public struct Vector2Int { public int x, y; public Vector2Int(int x, int y) { this.x = x; this.y = y; } }
     public struct Vector3 { public float x, y, z; public Vector3(float x, float y, float z) { this.x = x; this.y = y; this.z = z; } public static Vector3 zero, one, up, forward, right; public static Vector3 operator +(Vector3 a, Vector3 b) => a; public static Vector3 operator -(Vector3 a, Vector3 b) => a; public static Vector3 operator *(Vector3 a, float b) => a; public static float Distance(Vector3 a, Vector3 b) => 0; }
@@ -31,7 +32,11 @@ namespace UnityEngine
     public class Light : Behaviour { public float intensity; }
     public class AudioClip : Object {}
     public class AudioSource : Behaviour { public AudioClip clip; public bool loop; public float volume; public void Play() {} public void PlayOneShot(AudioClip c) {} }
-    public class Sprite : Object {}
+    public class Texture : Object { public int width, height; }
+    public class Texture2D : Texture {}
+    public class Font : Object {}
+    public enum SpriteMeshType { FullRect, Tight }
+    public class Sprite : Object { public static Sprite Create(Texture2D t, Rect r, Vector2 pivot, float ppu, uint extrude, SpriteMeshType mesh, Vector4 border) => new Sprite(); }
     public enum RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace }
     public class Canvas : Behaviour { public static void ForceUpdateCanvases() {} public RenderMode renderMode; public int sortingOrder; public bool isRootCanvas; public Canvas rootCanvas; }
     public enum TextAnchor { UpperLeft, UpperCenter, UpperRight, MiddleLeft, MiddleCenter, MiddleRight, LowerLeft, LowerCenter, LowerRight }
@@ -60,19 +65,20 @@ namespace UnityEngine.UI
     using UnityEngine.EventSystems;
     public class Graphic : UIBehaviour { public Color color; public bool raycastTarget; public RectTransform rectTransform; }
     public class MaskableGraphic : Graphic {}
-    public class Image : MaskableGraphic { public Sprite sprite; }
+    public class Image : MaskableGraphic { public enum Type { Simple, Sliced, Tiled, Filled } public Sprite sprite; public Type type; public float pixelsPerUnitMultiplier; public bool preserveAspect; }
     public struct Navigation { public enum Mode { None, Horizontal, Vertical, Automatic, Explicit } public Mode mode; }
     public class Selectable : UIBehaviour { public Navigation navigation; public bool interactable; public Graphic targetGraphic; public ColorBlock colors; }
     public struct ColorBlock { public Color normalColor, highlightedColor, pressedColor, selectedColor, disabledColor; public float colorMultiplier, fadeDuration; public static ColorBlock defaultColorBlock; }
     public class Button : Selectable { public class ButtonClickedEvent : UnityEngine.Events.UnityEvent {} public ButtonClickedEvent onClick = new ButtonClickedEvent(); }
     public class Slider : Selectable { public float value, maxValue, minValue; }
-    public class ScrollRect : UIBehaviour { public RectTransform content; public bool horizontal, vertical; public float verticalNormalizedPosition; public RectTransform viewport; }
+    public class Scrollbar : Selectable { public RectTransform handleRect; }
+    public class ScrollRect : UIBehaviour { public RectTransform content; public bool horizontal, vertical; public float verticalNormalizedPosition; public RectTransform viewport; public Scrollbar verticalScrollbar; }
     public class ContentSizeFitter : UIBehaviour { public enum FitMode { Unconstrained, MinSize, PreferredSize } public FitMode horizontalFit, verticalFit; }
     public abstract class LayoutGroup : UIBehaviour { public RectOffset padding; public TextAnchor childAlignment; }
     public class HorizontalOrVerticalLayoutGroup : LayoutGroup { public float spacing; public bool childForceExpandWidth, childForceExpandHeight, childControlWidth, childControlHeight; }
     public class HorizontalLayoutGroup : HorizontalOrVerticalLayoutGroup {}
     public class VerticalLayoutGroup : HorizontalOrVerticalLayoutGroup {}
-    public class LayoutElement : UIBehaviour { public float minWidth, minHeight, preferredWidth, preferredHeight, flexibleWidth, flexibleHeight; }
+    public class LayoutElement : UIBehaviour { public bool ignoreLayout; public float minWidth, minHeight, preferredWidth, preferredHeight, flexibleWidth, flexibleHeight; }
     public class CanvasScaler : UIBehaviour { public enum ScaleMode { ConstantPixelSize, ScaleWithScreenSize, ConstantPhysicalSize } public ScaleMode uiScaleMode; public Vector2 referenceResolution; public float matchWidthOrHeight; }
     public class GraphicRaycaster : UIBehaviour {}
     public static class LayoutRebuilder { public static void ForceRebuildLayoutImmediate(RectTransform r) {} }
@@ -95,7 +101,10 @@ namespace TMPro
 {
     public enum TextAlignmentOptions { Center, Left, Right, Midline, TopLeft, Top, MidlineLeft }
     public enum FontStyles { Normal, Bold, Italic }
-    public class TMP_Text : UnityEngine.UI.MaskableGraphic { public string text; public float fontSize; public TextAlignmentOptions alignment; public bool enableWordWrapping; public bool richText; public FontStyles fontStyle; public bool enableAutoSizing; public float fontSizeMin, fontSizeMax; }
+    public class TMP_Text : UnityEngine.UI.MaskableGraphic { public string text; public float fontSize; public TextAlignmentOptions alignment; public bool enableWordWrapping; public bool richText; public FontStyles fontStyle; public bool enableAutoSizing; public float fontSizeMin, fontSizeMax; public TMP_FontAsset font; public float characterSpacing; }
+    public struct TMP_FontWeightPair { public TMP_FontAsset regularTypeface, italicTypeface; }
+    public class TMP_FontAsset : UnityEngine.ScriptableObject { public TMP_FontWeightPair[] fontWeightTable = new TMP_FontWeightPair[10]; public System.Collections.Generic.List<TMP_FontAsset> fallbackFontAssetTable; public static TMP_FontAsset CreateFontAsset(UnityEngine.Font f) => null; }
+    public static class TMP_Settings { public static TMP_FontAsset defaultFontAsset; }
     public class TextMeshProUGUI : TMP_Text {}
 }
 

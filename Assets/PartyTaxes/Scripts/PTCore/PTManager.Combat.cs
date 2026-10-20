@@ -365,7 +365,7 @@ public partial class PTManager
         int damage = Mathf.RoundToInt(attacker.DealDamage() * PartyDamageMultiplier * TraitDamageMultiplier(attacker)); //stance, hazard pay and traits change how hard the party hits
         bool wasCrit = attacker.WasCrit;
         int actualDamage = target.TakeDamage(damage);
-        string critTag = wasCrit ? " <color=yellow>CRITICAL HIT!</color>" : "";
+        string critTag = wasCrit ? " <color=" + PTUITheme.RedInk + "><b>CRITICAL HIT!</b></color>" : "";
 
         PTAdventureLog.Log(attacker.Name + " attacks " +
                            "<enemy>" + target.Name + "</enemy>" + " for " + actualDamage + " damage!" + critTag + " " +
@@ -407,7 +407,7 @@ public partial class PTManager
         int enemyDamage = Mathf.RoundToInt(enemyAttacker.DealDamage() * StanceDamageTaken);                 //an aggressive stance leaves the party more exposed
         bool wasCrit = enemyAttacker.WasCrit;
         int actualDamage = partyTarget.TakeDamage(enemyDamage);
-        string critTag = wasCrit ? " <color=yellow>CRITICAL HIT!</color>" : "";
+        string critTag = wasCrit ? " <color=" + PTUITheme.RedInk + "><b>CRITICAL HIT!</b></color>" : "";
 
         PTAdventureLog.Log("<enemy>" + enemyAttacker.Name + "</enemy>" + " attacks " +
                            partyTarget.Name + " for " + actualDamage + " damage!" + critTag + " " +

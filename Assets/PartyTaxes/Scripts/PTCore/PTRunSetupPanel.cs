@@ -23,7 +23,7 @@ namespace PartyTaxes
 
         public static PTRunSetupPanel Show(PTManager manager)
         {
-            RectTransform canvas = PTUIFactory.CreateCanvas("PT Run Setup", 30);
+            RectTransform canvas = PTUIFactory.CreateCanvas("PT Run Setup", 30, true);
             PTRunSetupPanel setup = canvas.gameObject.AddComponent<PTRunSetupPanel>();
             setup.manager = manager;
             setup.auditLevel = PTRunRules.MaxAuditLevel;                                   // default to the hardest unlocked level
@@ -34,16 +34,17 @@ namespace PartyTaxes
 
         private void Build(RectTransform canvas)
         {
-            RectTransform panel = PTUIFactory.CreatePanel("Panel", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth, 24, 8f);
+            RectTransform panel = PTUIFactory.CreatePanel("Panel", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth, 44, 8f);
+            PTUIFactory.CreateOrnament("Seal", panel, PTUITheme.WaxSeal, new Vector2(1f, 1f), new Vector2(-34f, -30f), new Vector2(124f, 124f), -14f);
 
-            TextMeshProUGUI title = PTUIFactory.CreateLabel("Title", panel, 52f, TextAlignmentOptions.Center, 64f);
-            title.fontStyle = FontStyles.Bold;
+            TextMeshProUGUI title = PTUIFactory.CreateTitle("Title", panel, 72f, 80f);
             title.text = "Party Taxes";
-            TextMeshProUGUI pitch = PTUIFactory.CreateLabel("Pitch", panel, 20f, TextAlignmentOptions.Center, 52f);
-            pitch.text = "Convicted of embezzlement and exiled to the goblin frontier. Hire heroes, pay the Queen, survive 28 days.";
+            PTUIFactory.CreateDivider(panel);
+            TextMeshProUGUI pitch = PTUIFactory.CreateLabel("Pitch", panel, 21f, TextAlignmentOptions.Center, 52f);
+            pitch.text = "<i>Convicted of embezzlement and exiled to the goblin frontier. Hire heroes, pay the Queen, survive 28 days.</i>";
 
-            TextMeshProUGUI accusationHeader = PTUIFactory.CreateLabel("AccusationHeader", panel, 24f, TextAlignmentOptions.Left, 32f);
-            accusationHeader.text = "<b>What were you accused of?</b>";
+            TextMeshProUGUI accusationHeader = PTUIFactory.CreateHeading("AccusationHeader", panel, 26f, TextAlignmentOptions.Left, 34f);
+            accusationHeader.text = "What were you accused of?";
             RectTransform accusationRow = PTUIFactory.CreateRow(panel, 44f);
             foreach (Accusation option in (Accusation[])Enum.GetValues(typeof(Accusation)))
             {
@@ -56,8 +57,8 @@ namespace PartyTaxes
             TextMeshProUGUI accusationText = PTUIFactory.CreateLabel("AccusationText", panel, 19f, TextAlignmentOptions.Left, 56f);
             refreshers.Add(() => accusationText.text = PTRunRules.Description(accusation) + LockedHints());
 
-            TextMeshProUGUI levelHeader = PTUIFactory.CreateLabel("LevelHeader", panel, 24f, TextAlignmentOptions.Left, 32f);
-            levelHeader.text = "<b>Audit Level</b>";
+            TextMeshProUGUI levelHeader = PTUIFactory.CreateHeading("LevelHeader", panel, 26f, TextAlignmentOptions.Left, 34f);
+            levelHeader.text = "Audit Level";
             RectTransform levelRow = PTUIFactory.CreateRow(panel, 40f);
             for (int level = 1; level <= PTRunRules.MAX_AUDIT_LEVEL; level++)
             {
@@ -84,8 +85,9 @@ namespace PartyTaxes
             refreshers.Add(() => record.text = "Wins " + PTRunRules.Wins + "  ·  Best day " + PTRunRules.BestDay + "  ·  Thieves caught " +
                                                PTRunRules.ThievesCaught + "  ·  Best score " + PTRunRules.BestScore);
 
+            PTUIFactory.CreateDivider(panel);
             TextMeshProUGUI beginLabel;
-            PTUIFactory.CreateButton(panel, 52f, Begin, out beginLabel);
+            PTUIFactory.CreateButton(panel, 56f, Begin, out beginLabel, PTButtonStyle.Wax);
             beginLabel.text = "<b>Begin your sentence</b>";
         }
 
@@ -96,7 +98,7 @@ namespace PartyTaxes
             {
                 if (!PTRunRules.IsUnlocked(option)) hints.Add(PTRunRules.Name(option).Replace("The ", "") + ": " + PTRunRules.UnlockCondition(option));
             }
-            return hints.Count == 0 ? "" : "\n<size=80%><color=#B0A080>Locked: " + string.Join(" · ", hints) + "</color></size>";
+            return hints.Count == 0 ? "" : "\n<size=80%><color=" + PTUITheme.FadedInk + ">Locked: " + string.Join(" · ", hints) + "</color></size>";
         }
 
         private void Begin()
