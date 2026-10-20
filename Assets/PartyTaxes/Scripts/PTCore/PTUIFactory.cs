@@ -136,7 +136,7 @@ namespace PartyTaxes
 
         public static void EnsureEventSystem()                                             // buttons need an EventSystem to receive clicks
         {
-            if (UnityEngine.Object.FindFirstObjectByType<EventSystem>() != null) return;
+            if (UnityEngine.Object.FindAnyObjectByType<EventSystem>() != null) return;
             new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
         }
     }

@@ -4,7 +4,7 @@ using System;
 using System.Collections;
 namespace UnityEngine
 {
-    public class Object { public string name; public static T Instantiate<T>(T o, Transform p) where T : Object => o; public static T Instantiate<T>(T o, Vector3 pos, Quaternion r, Transform p) where T : Object => o; public static T Instantiate<T>(T o) where T : Object => o; public static void Destroy(Object o) {} public static T FindFirstObjectByType<T>() where T : Object => null; public static implicit operator bool(Object o) => o != null; }
+    public class Object { public string name; public static T Instantiate<T>(T o, Transform p) where T : Object => o; public static T Instantiate<T>(T o, Vector3 pos, Quaternion r, Transform p) where T : Object => o; public static T Instantiate<T>(T o) where T : Object => o; public static void Destroy(Object o) {} public static T FindAnyObjectByType<T>() where T : Object => null; public static implicit operator bool(Object o) => o != null; }
     public class Component : Object { public GameObject gameObject; public Transform transform; public T GetComponent<T>() => default; public T GetComponentInChildren<T>() => default; public T GetComponentInParent<T>() => default; }
     public class Behaviour : Component { public bool enabled; public bool isActiveAndEnabled; }
     public class MonoBehaviour : Behaviour { public static bool RunCoroutines = true; public Coroutine StartCoroutine(IEnumerator e) { int guard = 0; if (RunCoroutines) while (guard++ < 1000000 && e.MoveNext()) { } return new Coroutine(); } public void StopAllCoroutines() {} public void StopCoroutine(Coroutine c) {} }

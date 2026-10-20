@@ -6,7 +6,8 @@ You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-
 
 ---------------------------------------------------------------------------------------
 
-- **Engine:** Unity 6000.3.9f1
+- **Engine:** Unity 6000.6.4f1 (Unity 6.6; upgraded from 6000.3.9f1)
+  - *First open after the upgrade:* Unity re-imports the project, updates the built-in packages (URP, uGUI, Test Framework, Multiplayer Center) and `packages-lock.json`, and adds the editor revision to `ProjectSettings/ProjectVersion.txt`. Commit those generated changes. Scripts avoid the InstanceID-era APIs that became errors in 6.5 (`FindAnyObjectByType` instead of `FindFirstObjectByType`).
 - **Input:** Unity Input System package
 - **UI:** TextMesh Pro
 

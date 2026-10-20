@@ -30,7 +30,7 @@ public class PTAdventureLog : MonoBehaviour
     private readonly List<string> logEntries = new List<string>();                         // Store raw log entries in a readonly list of strings.        -Could be used for a potential future saving/loading system. 
     private readonly List<TextMeshProUGUI> visualEntries = new List<TextMeshProUGUI>();    //store visual log entries in a readonly list of TextMeshProUGUI objects.
     private TextMeshProUGUI entryTemplate;
-    private static PTAdventureLog _instance;                                               //cached singleton instance to avoid FindFirstObjectByType every call
+    private static PTAdventureLog _instance;                                               //cached singleton instance to avoid FindAnyObjectByType every call
     
     private readonly System.Collections.Generic.Queue<string> messageQueue = new System.Collections.Generic.Queue<string>();  // Queue for delayed messages
     private bool isProcessingQueue = false;                                                // Track if queue is being processed
@@ -223,13 +223,13 @@ public class PTAdventureLog : MonoBehaviour
 #endregion
     public static void ClearLog()                                                //Static method for clearing the log, uses cached instance
     {
-        PTAdventureLog logger = _instance != null ? _instance : FindFirstObjectByType<PTAdventureLog>();
+        PTAdventureLog logger = _instance != null ? _instance : FindAnyObjectByType<PTAdventureLog>();
         if (logger != null) logger.ClearLogInstance();
     }
 
     public static void Log(string message)                                                    //Static Method for logging messages to the adventure log, uses cached instance
     {                                                                                         
-        PTAdventureLog logger = _instance != null ? _instance : FindFirstObjectByType<PTAdventureLog>();
+        PTAdventureLog logger = _instance != null ? _instance : FindAnyObjectByType<PTAdventureLog>();
         if (logger != null)
         {
             logger.QueueLogMessage(message);
