@@ -1,4 +1,4 @@
-# Party Taxes v0.3
+# Party Taxes v0.5
 
 > *A game about paying your empl— ...friends, to adventure with you on a quest to slay pests for the queen.*
 
@@ -26,6 +26,8 @@
 
 ## Controls
 
+Every action has a clickable button in the **action bar** on the right of the screen (showing costs and what's available right now). The keyboard shortcuts below still work.
+
 ### Town
 | Key | Action |
 ---------------------------------------------------------------------------------------
@@ -36,6 +38,7 @@
 | `1` | Bless the party (cleric) |
 | `3` | Resurrect a fallen member *(unlocks day 7)* |
 | `Escape` | Reset / restart the game |
+| `4` | *(Debug mode only)* Give every party member 100 XP |
 
 ### Combat
 ---------------------------------------------------------------------------------------
@@ -47,31 +50,31 @@
 ## Gameplay Systems
 
 ### Party Management
-Recruit and manage a party of up to 4 adventurers. Each member has stats (HP, attack, defense), a level, and daily wages you must pay. New recruits are leveled up to match your party's average. Members who die are permanently tracked and can only return through resurrection — never normal recruitment.
+Recruit and manage a party of up to 4 adventurers. Each member has stats (HP, attack, defense), a level, and daily wages you must pay. New recruits are leveled up to match your party's average and join at full health. Members who die are remembered and can return through resurrection.
 
 ### Gold & Economy
 Gold is your core resource. You earn it by defeating enemies and through weekly survival bonuses. You spend it on wages, healing, blessings, recruitment, and resurrection. Party members may also steal gold while you sleep, with higher theft rates and amounts when wages go unpaid.
 
 ### Day / Night Cycle
-Each day you can perform town actions and trigger one encounter. Sleeping advances the day, pays wages, rolls for theft, and resets all daily actions. Consecutive days without paying wages increase theft chance and inch towards mutiny.
+Each day you can perform town actions and trigger one encounter. Sleeping advances the day, pays wages, rests the party, rolls for theft, and resets all daily actions. A paid party recovers 25% of its max HP overnight; an unpaid party sleeps poorly and recovers nothing. Consecutive days without paying wages increase theft chance and inch towards mutiny.
 
 ### Combat
-Encounters spawn a scaled group of enemies based on party size and days elapsed. Each party member attacks a random enemy, then surviving enemies counter-attack. The member who lands the killing blow earns all XP from that enemy. Defeating all enemies awards gold loot and a commission bonus.
+Encounters spawn a scaled group of enemies based on party size and days elapsed (see *Enemy Spawn Scaling*). Each party member attacks a random enemy, then surviving enemies counter-attack. XP from each kill is split evenly between all party members. Defeating all enemies awards gold loot and a commission bonus.
 
 ### Healing & Blessings
 The cleric can heal the party once per day for a small gold fee, restoring HP to each member. A full blessing costs significantly more but fully restores HP and removes the Cowardly debuff. Cowardly members receive 30% reduced healing from normal heals.
 
 ### Recruitment
-Recruit a new party member for half your current total daily wages. Cowardly members inflate recruitment costs by 50%. When all named adventurers have died, a mysterious stranger with fully randomized stats can be recruited instead.
+Recruit a new party member for half your current total daily wages. Cowardly members inflate recruitment costs by 50%.
 
 ### Fleeing
 Escape from battle at the cost of 10% of your current gold. All surviving (non-resurrected) party members are branded as Cowardly. No loot or commission is earned.
 
 ### Resurrection
-Unlocked on day 7. Pay 100 gold plus the fallen member's daily wages to resurrect a random dead party member. Resurrected members return with a 10% stat penalty and are **Marked by Death** — they cannot become Cowardly but carry permanent stat reductions.
+Unlocked on day 7. Pay 100 gold plus the fallen member's daily wages to resurrect a random dead party member. Resurrected members come back as themselves (same attributes, level and XP) at full health, with a permanent 10% penalty to max HP, attack and defense, and are **Marked by Death** — they cannot become Cowardly.
 
 ### Leveling
-Members gain XP from kills. Every 2 levels grants +1 attack and +1 defense. Each level up also increases max HP by 10 and daily wages by 25%, so stronger parties cost more to maintain.
+Members gain XP from kills. Each level up grants **+1 to the race's affinity attribute** (Human: Might, Dwarf: Constitution, Elf: Sense, Halfling: Luck), **+10 max HP**, and heals 30% of max HP, but also raises daily wages by 25%, so stronger parties cost more to maintain. Enemies that level up mid-fight (by killing party members) grow the same way.
 
 
 ## Game Over Conditions
@@ -85,18 +88,24 @@ Members gain XP from kills. Every 2 levels grants +1 attack and +1 defense. Each
 
 ## Script Architecture
 
-Contains a 4 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul
+Contains a 5 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul, and a runtime-built action bar.
 
-### `PTManager` — partial class, 4 files
+### `PTManager` — partial class, 5 files
 
 The central game controller. Owns all shared state (gold, party list, enemy list, day counter, UI references, balance constants) and is split into partial files for readability:
 
 | File | Responsibility |
 ---------------------------------------------------------------------------------------
-| `PTManager.cs` | Variables, constants, `Awake`/`Start`, input setup, shared helpers (`ChangeGold`, `UpdateUI`, `TriggerGameOver`, `SetSunIntensity`) |
+| `PTManager.cs` | Variables, constants, `GameState` (Town / Combat / GameOver), `Awake`/`Start`, input setup, shared helpers (`ChangeGold`, `UpdateUI`, `TriggerGameOver`, `SetSunIntensity`) |
 | `PTManager.Party.cs` | Party formation (`GetNextPartyMemberTransform`), `AddPartyMember`, `RemovePartyMember`, `LevelUpToPartyAverage`, `GetAveragePartyLevel` |
-| `PTManager.Combat.cs` | `OnEncounter`, `OnAttack` (with kill-credit XP), `OnRunAway` |
-| `PTManager.Town.cs` | `OnSleep`, `OnHeal`, `OnBless`, `OnRecruit`, `OnResurrect`, `OnReset`, `CanPerformTownAction` |
+| `PTManager.Combat.cs` | `TryEncounter` + `GetEncounterSize`, `TryAttack`, `TryRunAway`, turn phases |
+| `PTManager.Town.cs` | `TrySleep` + `RestParty`, `TryHeal`, `TryBless`, `TryRecruit`, `TryResurrect`, `RestartRun`, `CanPerformTownAction` |
+| `PTManager.Actions.cs` | Read-only costs and availability for the action bar (`HealCost`, `RecruitCost`, `FleeCost`, ...) |
+
+Each input callback (`OnSleep`, `OnHeal`, ...) is a one-line wrapper around its `Try...` method, so keyboard and buttons share the same logic.
+
+### `PTActionBar`
+Builds its own overlay canvas at runtime with a button for every action (no scene setup needed; turn it off with `buildActionBar` on PTManager). `PTManager.UpdateUI()` calls `Refresh()`, which re-reads labels, costs and which actions are allowed.
 
 ### `PTSoul`
 Represents a single character — party member or enemy. Owns stats (HP, attack, defense, level, XP, wages) and status flags (`isCowardly`, `markedByDeath`, `isAdversary`). Handles its own damage, healing, blessing, XP, and level-up logic, and drives its own UI elements (name, health bar, XP bar). `PTManager` holds lists of `PTSoul` instances and calls into them to run gameplay.
@@ -108,7 +117,7 @@ Centralized character generation system that creates both party members and enem
 Singleton scrollable narrative log. Any script calls `PTAdventureLog.Log(message)` to append a rich-text entry. Handles auto-scrolling, entry count limits, and custom color tags for enemies (`<enemy>`), party names (`<partyname>`), etc.
 
 ### `DeadCharacterData`
-Serializable snapshot class defined alongside `PTManager`. Captures a fallen `PTSoul`'s name, stats, and original prefab reference at the moment of death. Used exclusively by the resurrection system to restore the character with a configurable stat penalty.
+Serializable snapshot class defined alongside `PTManager`. Captures a fallen `PTSoul`'s name, attributes, level, XP, wages and original prefab reference at the moment of death. Used exclusively by the resurrection system to restore the character with a configurable stat penalty.
 
 ### `PTSoulTypeData` (ScriptableObject)
 Configuration asset for each race/creature type (Human, Elf, Goblin, etc.). Defines attribute ranges, spawn level brackets, name pools, gold/XP rewards, wage ranges, and per-level scaling bonuses. Supports both friendly (party member) and adversary (enemy) types.
@@ -125,17 +134,19 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 **Combat Methods:**
 - `DealDamage()` — Rolls the dice for an attack, checks for critical hits, calculates damage output
 - `TakeDamage(int damage)` — Reduces incoming damage based on defense (diminishing returns), subtracts from health
+- `FinishSetup()` — Derives stats, fills HP and marks the soul as initialized; spawners call it so `Start()` won't overwrite generated or resurrected data
 - `WasCrit` — Simple yes/no check: was the last attack a critical hit?
 
 **Healing Methods:**
 - `Heal(int healAmount)` — Restores health points; cowards get 30% less healing due to shame
+- `RestoreHP(int amount)` — Plain HP restore with no cowardice penalty (used for overnight rest)
 - `Bless()` — Premium healing that fully restores HP AND removes coward status
 
 **Character Growth:**
 - `GainXP(int xpAmount)` — Adds experience points, automatically triggers level-up if threshold reached
-- `LevelUp()` — Increases level, grants 1 attribute point, raises wages by 25%, heals partially
-- `ChangeAttribute(string attributeName, int amount)` — Increases/decreases specific stat, recalculates derived combat values
-- `RecalculateStats()` — Converts 5 base attributes into HP, attack, defense, crit chance, crit multiplier
+- `LevelUp()` — Increases level, +1 to the affinity attribute, +10 max HP, heals 30%, raises wages by 25%
+- `ChangeAttribute(SoulAttribute attribute, int amount)` — Increases/decreases specific stat, recalculates derived combat values
+- `RecalculateStats()` — Converts 5 base attributes (plus level HP bonus and stat multiplier) into HP, attack, defense, crit chance, crit multiplier
 
 **UI Methods:**
 - `UpdateUI()` — Refreshes all on-screen displays: name, health bar, XP bar, level number
@@ -167,7 +178,7 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 **Member Management:**
 - `SpawnRandomPartyMember()` — Creates new character with random stats/race, adds to party, auto-levels to match team
 - `RemovePartyMember(PTSoul member)` — Removes from party list, saves data for resurrection, destroys game object
-- `LevelUpToPartyAverage(PTSoul newMember)` — New recruits instantly level up to match party's average level
+- `LevelUpToPartyAverage(PTSoul newMember)` — New recruits instantly level up to match party's average level, then heal to full
 
 **Utility:**
 - `GetAveragePartyLevel()` — Calculates team power by averaging all member levels
@@ -180,21 +191,21 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 - `CanPerformTownAction()` — Safety check that prevents town actions during combat
 
 **Daily Cycle:**
-- `OnSleep()` — **(Spacebar)** Advances to next day, pays wages, checks for theft, awards weekly bonuses, resets daily action flags
+- `TrySleep()` — **(Spacebar)** Advances to next day, pays wages, rests the party (if paid), checks for theft, awards weekly bonuses, resets daily action flags
 
 **Services:**
-- `OnHeal()` — **(Q key)** Costs 10 gold per member, heals everyone for 50 HP, once per day
-- `OnBless()` — **(1 key)** Costs 100 gold per member, fully heals + removes coward status, once per day
-- `OnRecruit()` — **(F key)** Costs half of daily wages (more with cowards), spawns random character
-- `OnResurrect()` — **(3 key)** Unlocks day 7+, costs 100 gold + wages, revives random dead character at 90% stats with "Marked by Death"
-- `OnReset()` — **(Escape key)** Reloads entire scene from scratch
+- `TryHeal()` — **(Q key)** Costs 10 gold per member, heals everyone for 50 HP, once per day
+- `TryBless()` — **(1 key)** Costs 100 gold per member, fully heals + removes coward status, once per day
+- `TryRecruit()` — **(F key)** Costs half of daily wages (more with cowards), spawns random character
+- `TryResurrect()` — **(3 key)** Unlocks day 7+, costs 100 gold + wages, revives a random dead character as themselves at 90% stats with "Marked by Death"
+- `RestartRun()` — **(Escape key)** Reloads entire scene from scratch
 
 ---
 
 ### **PTManager.Combat.cs** — Battle System
 
 **Enemy Spawning:**
-- `OnEncounter()` — **(E key)** Spawns 2-6+ enemies (scaled to party size + days), prevents sleeping, starts turn-based combat
+- `TryEncounter()` — **(E key)** Spawns a group of enemies sized by `GetEncounterSize()`, switches to the Combat state, starts turn-based combat
 
 **Turn Queue System:**
 - `StartCombat()` — Clears old combat data, announces battle start, begins first round
@@ -209,10 +220,10 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 
 **Victory/Defeat:**
 - `OnAllEnemiesDefeated()` — Awards commission gold, enables sleeping, returns to town
-- `OnAttack()` — **(Left Click)** Executes active party member's attack when it's their turn
+- `TryAttack()` — **(Left Click)** Executes active party member's attack when it's their turn (clicks on UI buttons are ignored)
 
 **Escape System:**
-- `OnRunAway()` — **(R key)** Costs 10% gold, each member rolls escape chance based on agility vs enemy agility, escapees become cowards
+- `TryRunAway()` — **(R key)** Costs 10% gold, each member rolls escape chance based on agility vs enemy agility, escapees become cowards
 
 ---
 
@@ -249,7 +260,7 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 
 **Enemy Creation:**
 - `PickEnemyType(int partyLevel)` — Chooses appropriate enemy type whose level range matches party's level
-- `RandomizeEnemyStats(PTSoul soul, int partyLevel)` — Creates enemy: picks type, rolls attributes, caps level at party level, applies prefix
+- `RandomizeEnemyStats(PTSoul soul, int partyLevel)` — Creates enemy: picks type, caps level at party level, rolls attributes plus per-level bonuses, applies prefix
 - `SpawnEnemy()` — **Full pipeline:** spawns enemy prefab, runs RandomizeEnemyStats, returns finished enemy
 
 **Utility:**
@@ -260,7 +271,7 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 ### **PTSoulTypeData.cs** — Race Configuration (ScriptableObject)
 
 **Core Method:**
-- `ApplyAttributes(PTSoul soul)` — Rolls character creation: sets race, enemy status, random level in range, random attributes in ranges, adds per-level scaling, sets rewards
+- `ApplyAttributes(PTSoul soul, int maxLevel)` — Rolls character creation: sets race, enemy status, affinity, random level in range (capped at `maxLevel`), random attributes in ranges, adds per-level scaling above the minimum level, sets rewards
 
 **Properties:**
 - `HasWageOverride` — Returns true if this race has custom wage ranges set
@@ -272,7 +283,7 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 ### **PTSoulPrefix.cs** — Character Prefix System
 
 **Application:**
-- `Apply(PTSoul soul)` — Applies modifier to chosen attribute (e.g., "Mighty" adds +3 to Might), clamped 1-99
+- `Apply(PTSoul soul)` — Applies modifier to chosen attribute via `PTSoul.ChangeAttribute` (e.g., "Mighty" adds +3 to Might), clamped 1-99
 
 ---
 
@@ -282,7 +293,7 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 - `DeadCharacterData(PTSoul soul, GameObject prefab)` — Saves snapshot of all stats, name, race, level, wages before death
 
 **Restoration:**
-- `ApplyTo(PTSoul soul, float statPenalty)` — Restores saved stats to new body with 10% penalty, marks as "Marked by Death", makes fearless
+- `ApplyTo(PTSoul soul, float statPenalty)` — Restores saved attributes to the new body, applies a lasting 10% stat multiplier, marks as "Marked by Death", makes fearless
 
 ---------------------------------------------------------------------------------------
 
@@ -291,7 +302,7 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 **Daily Loop:**
 ```
 Wake Up → See Wages → Find Enemies (E) → Fight → Win → Get Gold → 
-Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space) → Repeat
+Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space): pay wages, rest → Repeat
 ```
 
 **Combat Turn Order:**
@@ -302,17 +313,19 @@ Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space) → Repeat
 5. New round starts, repeat until victory/defeat
 
 **Stat Derivation Formulas:**
-- **Max HP** = 60 + (Constitution × 10)
-- **Attack** = Might × 4
-- **Defense** = Constitution × 2
+- **Max HP** = (60 + (Constitution × 10) + 10 per level gained) × stat multiplier
+- **Attack** = Might × 4 × stat multiplier
+- **Defense** = (Constitution × 2, +3 for party members) × stat multiplier
+- **Stat multiplier** = 1.0 normally, 0.9 for souls Marked by Death
 - **Crit Chance** = Luck × 3% (capped at 75%)
 - **Crit Multiplier** = 1.5 + (Luck × 0.02) + (Might × 0.02) + (Sense × 0.02)
 - **Damage Reduction** = Defense / (Defense + 50) — diminishing returns formula
 
-**Enemy Spawn Scaling:**
-- **Base Formula:** Random.Range(partyCount, partyCount × 2)
-- **Daily Escalation:** After day 7, add +1 enemy per day
-- **Example:** 2-member party on day 1 = 2-4 enemies; day 10 = 2-7 enemies
+**Enemy Spawn Scaling (`GetEncounterSize`):**
+- **Grace days (1-3):** exactly one enemy per party member
+- **Base Formula:** partyCount to ceil(partyCount × 1.5), inclusive
+- **Daily Escalation:** from day 7, +1 to the maximum every 3 days (day 7-9: +1, day 10-12: +2, ...)
+- **Example:** 4-member party on day 4 = 4-6 enemies; day 10 = 4-8 enemies
 
 ---------------------------------------------------------------------------------------
 
@@ -327,11 +340,19 @@ Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space) → Repeat
 | `BASE_RESURRECTION_COST` | 100 | Base gold cost for resurrection (+ wages) |
 | `THEFT_CHANCE_BROKE` | 0.25 | 25% theft chance when wages unpaid |
 | `THEFT_CHANCE_NORMAL` | 0.1 | 10% theft chance when wages paid |
-| `THEFT_PERCENT_BROKE` | 0.1 | 10% of gold stolen when broke |
-| `THEFT_PERCENT_NORMAL` | 0.2 | 20% of gold stolen normally |
+| `THEFT_PERCENT_BROKE` | 0.2 | 20% of gold stolen when broke |
+| `THEFT_PERCENT_NORMAL` | 0.1 | 10% of gold stolen normally |
 | `FLEE_COST_PERCENT` | 0.1 | 10% of gold dropped to attempt fleeing |
 | `RESURRECTION_UNLOCK_DAY` | 7 | Day when resurrection becomes available |
 | `WEEKLY_BONUS_INTERVAL` | 7 | Days between weekly survival bonuses |
+| `REST_HEAL_PERCENT` | 0.25 | Share of max HP recovered overnight when wages are paid |
+| `ENCOUNTER_GRACE_DAYS` | 3 | Days with one enemy per party member |
+| `ENCOUNTER_MAX_MULTIPLIER` | 1.5 | Max enemies = party size × this (rounded up), before escalation |
+| `ESCALATION_START_DAY` / `ESCALATION_EVERY_DAYS` | 7 / 3 | +1 max enemy every 3 days from day 7 |
+
+PTSoul.cs: `PARTY_DEFENSE_BONUS` 3, `HP_PER_LEVEL` 10, `LEVEL_UP_HEAL_PERCENT` 0.3, `WAGE_GROWTH_PER_LEVEL` 1.25.
+
+These values were tuned with the balance model in `Tools/BalanceSim` — keep it in sync when you change them.
 
 ---------------------------------------------------------------------------------------
 
@@ -346,7 +367,9 @@ Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space) → Repeat
 
 **Singleton Adventure Log:** Static PTAdventureLog.Log() allows any script to append messages without coupling, while automatic colorization maintains visual consistency.
 
-**Resurrection Snapshot Pattern:** DeadCharacterData captures character state at death, allowing resurrection with stat penalties while preserving identity and preventing duplicate names.
+**Resurrection Snapshot Pattern:** DeadCharacterData captures a character's attributes at death, allowing resurrection with a lasting stat penalty while preserving identity.
+
+**Game State:** `PTManager.State` (Town / Combat / GameOver) decides which actions are allowed, replacing the old `canSleep` / `gameOver` flags. Per-day limits (`hasFought`, `hasHealed`, `hasBeenBlessed`) stay as flags.
 
 **Status Flag System:** Boolean flags (isCowardly, markedByDeath, isAdversary) on PTSoul enable complex interactions without inheritance (e.g., cowards reduce healing, marked characters can't become cowards).
 
@@ -360,18 +383,42 @@ Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space) → Repeat
 - **Auto-Scroll Intelligence:** Log only auto-scrolls if user was already near bottom (within 10% threshold)
 - **Formation Recentering:** When adding party members, entire formation recalculates to keep the group centered on spawn point
 - **Prefix Rarity:** 35% chance to apply prefix ensures they feel special without being overwhelming
-- **Enemy Level Capping:** Enemies never spawn above party's average level, preventing impossible encounters
+- **Enemy Level Capping:** Enemies never spawn above party's average level, preventing impossible encounters; the cap is applied before per-level attribute bonuses
 - **Wage Inflation:** Each level-up increases wages by 25%, creating escalating economic pressure
-- **Debug Mode Toggle:** Set `debugMode = true` in PTManager inspector to see AI decisions and spawn calculations in console
+- **Debug Mode Toggle:** Set `debugMode = true` in PTManager inspector to see AI decisions and spawn calculations in console, and to use `4` to grant XP
 - **Escape Individual Rolls:** Each party member independently rolls escape based on their agility vs average enemy agility (50% base ± difference)
 - **Colorization Regex:** Adventure log uses regex patterns to auto-detect and colorize gold amounts, HP, enemy names, etc.
-- **Theft Escalation:** Being broke increases both theft chance (10%→25%) and theft penalty logic to create pressure
+- **Theft Escalation:** Being broke increases both theft chance (10%→25%) and the share stolen (10%→20%) to create pressure
+- **Initialization Guard:** `PTSoul.Start()` only sets up souls that weren't already set up by a spawner (`FinishSetup()`), so generated and resurrected data survives the first frame
 - **UI Context Awareness:** Control display dynamically hides unavailable actions (e.g., Heal button disappears after daily use)
 - **Prefab Fallback Chain:** Resurrection tries original prefab → first party prefab → logs warning if all fail
 
 ---------------------------------------------------------------------------------------
 
 ## ⚖️ Recent Balance Changes
+
+### v0.5 - Phase 0: Stabilise
+Balance model (`python3 Tools/BalanceSim/party_taxes_sim.py`, 2,000 runs per strategy):
+
+| | v0.4 | v0.5 |
+|---|---|---|
+| Median days survived (recruit when affordable) | 5 | 14 |
+| Median days survived (careful) | 6 | 13 |
+| Day-1 wipes | 13% | 0.4–2.4% |
+| Best strategy | never recruit | recruit |
+
+**Problems:** levelling gave no stats (attribute points were only spendable in debug) while raising wages and enemy tier; HP never recovered except via the cleric; a full party faced up to 2× its size in enemies, so recruiting was punished; day 1 was lethal 13% of the time.
+
+**Changes:**
+- Level ups grant +1 affinity attribute, +10 max HP and a 30% heal; the +3 party defense bonus is no longer lost on level up
+- Paid parties rest 25% of max HP overnight
+- Max enemies is party × 1.5 (was × 2); 3 grace days with one enemy per member
+- Enemy per-level bonuses now apply (they were dead data); level cap applied first
+- Theft cut when broke is now larger than normal (was inverted)
+
+**Fixes:** resurrection restores the character's own attributes and keeps its penalty; new recruits no longer start with negative XP; level-up HP is no longer random; clicking action buttons doesn't also trigger an attack.
+
+**Still open (Phase 1):** every simulated run still ends in a wipe, none in mutiny. Money only becomes the real pressure once the Queen's tribute arrives. See `Docs/DesignReview_v0.4.md`.
 
 ### v0.4 - Combat Scaling Adjustment
 **Problem Identified:** With spawn formula `partyCount * 3`, a 2-member party faced 2-6 goblins on day 1. Action economy heavily favored enemies (6 attacks vs 2 per round), resulting in party struggling against full groups.
@@ -399,7 +446,8 @@ Recruit (F) / Heal (Q) / Bless (1) → Sleep (Space) → Repeat
 - **Combat Flow:** OnEncounter → StartCombat → StartRound → Party Phase → Enemy Phase → Victory/Defeat
 - **Resurrection Pipeline:** Death → DeadCharacterData → Resurrection → ApplyTo with penalties
 - **Log Message Flow:** Any script → PTAdventureLog.Log() → ColorizeMessage → AddVisualEntry → Auto-scroll
-- **Gold Transaction Path:** Any system → ChangeGold() → OnGoldChanged event → UpdateUI + Sound
+- **Gold Transaction Path:** Any system → ChangeGold() → OnGoldChanged event → UpdateUI (+ action bar refresh) + Sound
+- **Checking changes without Unity:** `dotnet run --project Tools/HeadlessTests` compiles the scripts against API stubs and runs behaviour checks; `python3 Tools/BalanceSim/party_taxes_sim.py` reports balance
 
 ---
 

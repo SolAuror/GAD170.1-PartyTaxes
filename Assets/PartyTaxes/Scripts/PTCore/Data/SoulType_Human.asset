@@ -49,3 +49,4 @@ MonoBehaviour:
   bonusConstitutionPerLevel: 0
   bonusSensePerLevel: 0
   bonusLuckPerLevel: 0
+  levelUpAttribute: 0

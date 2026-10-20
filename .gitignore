@@ -73,3 +73,11 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Python bytecode from Tools/
+__pycache__/
+
+# .NET build output from Tools/HeadlessTests
+Tools/HeadlessTests/bin/
+Tools/HeadlessTests/obj/
+!Tools/HeadlessTests/HeadlessTests.csproj

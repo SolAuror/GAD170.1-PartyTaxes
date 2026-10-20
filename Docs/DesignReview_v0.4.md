@@ -225,11 +225,26 @@ Do these alongside Phase 0. They're small now and expensive later.
 
 | Phase | Scope | Est. | Exit criteria |
 |---|---|---|---|
-| **0 · Stabilise** | Fix the §3.6 bugs. Level-ups grant stats. Overnight regen. `GameState` + `SoulData` split. Clickable UI. Update the README. | 1 wk | 📊 Median run > 12 days. Day-1 wipe < 3%. |
+| **0 · Stabilise** ✅ | Fix the §3.6 bugs. Level-ups grant stats. Overnight regen. `GameState` + `SoulData` split. Clickable UI. Update the README. | 1 wk | 📊 Median run > 12 days. Day-1 wipe < 3%. |
 | **1 · The Ledger (vertical slice)** | Hiring board, fire, individual payroll, Loyalty/Greed theft + Audit, Queen's tribute + 28-day win, Final Ledger screen. | 2–3 wks | Playtesters can explain *why* they lost. 📊 Endings: ≥ 50% economic (tribute/mutiny), ≤ 35% wipe. |
 | **2 · Combat rework** | Auto-combat + speed control, gold interventions, stances, job board (6–8 jobs). | 2 wks | Fight ≤ 45 s. ≤ 6 decisions per fight. |
 | **3 · Variety** | 15–20 traits, 30+ night events, wage negotiation, 3 Accusations, Audit levels 1–5. | 2 wks | Two runs on different seeds feel different by day 3. |
 | **4 · Ship** | WebGL, title/settings/tutorial, audio pass, itch page, a closed playtest of 10+ people, then launch. | 1–2 wks | Average session ≥ 25 min. ≥ 30% of testers start a second run. |
+
+### Phase 0 status (v0.5)
+
+| Item | Status |
+|---|---|
+| §3.6 bugs | ✅ Resurrection keeps attributes and a lasting penalty (`PTSoul.statMultiplier`); `Start()` no longer overwrites spawned souls (`FinishSetup()`); defense bonus survives recalculation; level-up heal is deterministic; theft cut fixed; spawn range inclusive and documented; XP split documented, dead kill-credit code removed; enemy per-level bonuses apply after the level cap; unused `deadCharacterNames` and `System.Reflection` removed. Also fixed: recruits levelled to the party average started with negative XP. |
+| Level-ups grant stats | ✅ +1 race affinity attribute (`PTSoulTypeData.levelUpAttribute`), +10 max HP, 30% heal |
+| Overnight regen | ✅ 25% max HP when wages are paid, none when unpaid |
+| Encounter scaling | ✅ party × 1.5 max (was × 2), 3 grace days. Recruiting is now the strongest strategy instead of the weakest |
+| `GameState` | ✅ Town / Combat / GameOver replaces `canSleep` / `gameOver` |
+| `SoulData` split | ⏸️ Deferred. Moving `PTSoul`'s fields into a nested class changes how every soul prefab is serialized and needs migrating in the editor. The bug class it was meant to fix ("`Start()` overwrote my data") is fixed directly with `FinishSetup()` for now |
+| Clickable UI | ✅ `PTActionBar`, built at runtime with costs on every button; hotkeys still work |
+| README | ✅ Updated to v0.5 |
+| Exit criteria | ✅ 📊 Median 13–14 days for strategies that recruit (10 for one that never recruits); day-1 wipes 0.4–2.4% |
+| Verification | `Tools/HeadlessTests` compiles all scripts against Unity API stubs and runs 25 behaviour checks. **Not yet run in the Unity editor**: needs a play-test pass |
 
 **If time is short:** Phase 0 plus the Queen's tribute, Loyalty/Greed theft, the hiring board, and night events (as plain text, no new art) are enough for a strong jam-scale itch release. The theme is carried by systems, not content.
 

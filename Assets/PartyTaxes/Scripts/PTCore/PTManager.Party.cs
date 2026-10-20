@@ -64,7 +64,6 @@ public partial class PTManager
             //only add to dead lists if the member is actually dead
             if (!member.isAlive)
             {
-                deadCharacterNames.Add(member.Name);                                                            //track this character as dead to prevent respawning
                 deadCharacters.Add(new DeadCharacterData(member, partyBasePrefab));                             //store character data with base prefab for resurrection
             }
             
@@ -98,6 +97,8 @@ public partial class PTManager
         {
             newMember.LevelUp();
         }
+        newMember.currentHP = newMember.maxHP;                                                           //new recruits always join at full health
+        newMember.UpdateUI();
 
         if (newMember.level > 1 && debugMode)
         {
@@ -116,38 +117,16 @@ public partial class PTManager
         return total / partyMembers.Count;
     }
 
-    /// <summary>
-    /// Debug method: Automatically assigns all unspent attribute points for all party members.
+    /// Debug method: grants every party member the given amount of XP, to test level ups.
     /// Only works when debugMode is enabled.
-    /// </summary>
-    public void DebugAutoAssignAllAttributePoints()
+    public void DebugGrantPartyXP(int amountPerMember)
     {
         if (!debugMode)
         {
-            Debug.LogWarning("Debug mode is not enabled. Cannot auto-assign attribute points.");
+            Debug.LogWarning("Debug mode is not enabled. Cannot grant XP.");
             return;
         }
-
-        int membersProcessed = 0;
-        foreach (PTSoul member in partyMembers)
-        {
-            if (member != null && member.atrPoints > 0)
-            {
-                member.AutoAssignAttributePoints();
-                membersProcessed++;
-            }
-        }
-
-        if (membersProcessed > 0)
-        {
-            PTAdventureLog.Log("[DEBUG] Auto-assigned attribute points for " + membersProcessed + " party member(s).");
-            Debug.Log("Auto-assigned attribute points for " + membersProcessed + " party member(s).");
-            UpdateUI();
-        }
-        else
-        {
-            PTAdventureLog.Log("[DEBUG] No party members have unspent attribute points.");
-            Debug.Log("No party members have unspent attribute points.");
-        }
+        ChangeXP(amountPerMember * partyMembers.Count, "[DEBUG]");                                       //ChangeXP splits the pool evenly between members
+        UpdateUI();
     }
 }

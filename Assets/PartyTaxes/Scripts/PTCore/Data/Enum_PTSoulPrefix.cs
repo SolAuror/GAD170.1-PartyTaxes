@@ -27,15 +27,7 @@ namespace PartyTaxes
         /// </summary>
         public void Apply(PTSoul soul)
         {
-            int amount = Mathf.Clamp(modifier, -2, 3);
-            switch (attribute)
-            {
-                case SoulAttribute.Might:        soul.atrMight        = Mathf.Clamp(soul.atrMight        + amount, 1, 99); break;
-                case SoulAttribute.Agility:      soul.atrAgility      = Mathf.Clamp(soul.atrAgility      + amount, 1, 99); break;
-                case SoulAttribute.Constitution: soul.atrConstitution = Mathf.Clamp(soul.atrConstitution + amount, 1, 99); break;
-                case SoulAttribute.Sense:        soul.atrSense        = Mathf.Clamp(soul.atrSense        + amount, 1, 99); break;
-                case SoulAttribute.Luck:         soul.atrLuck         = Mathf.Clamp(soul.atrLuck         + amount, 1, 99); break;
-            }
+            soul.ChangeAttribute(attribute, Mathf.Clamp(modifier, -2, 3), false);
         }
     }
 }

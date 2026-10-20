@@ -1,57 +1,73 @@
 using System.Collections.Generic;                                                                            //use System.Collections.Generic - for lists
 using UnityEngine;                                                                                           //use UnityEngine for MonoBehaviour and other Unity features
 using UnityEngine.InputSystem;                                                                               //use UnityEngine.InputSystem for the new Input System
+using UnityEngine.EventSystems;                                                                              //use UnityEngine.EventSystems to check if the pointer is over the UI
 using UnityEngine.UI;                                                                                        //use UnityEngine.UI for Slider references
 using UnityEngine.SceneManagement;                                                                          //use UnityEngine.SceneManagement for reloading the scene on reset
 using TMPro;                                                                                                 //use TMPro for TextMeshPro references
 using PartyTaxes;                                                                                            //use the PartyTaxes namespace to access the PTSoul class
 
 [System.Serializable]
-public class DeadCharacterData                                                                               //class to store information about dead characters for potential resurrection
+public class DeadCharacterData                                                                           //class to store information about dead characters for potential resurrection
 {
     public string name;
     public string type;
     public int level;
-    public int maxHP;
-    public int attack;
-    public int defense;
-    public int dailywages;
     public int currentXp;
+    public int dailywages;
+    public int atrMight;                                                                                 //attributes are stored instead of derived stats, so they can be recalculated on resurrection
+    public int atrAgility;
+    public int atrConstitution;
+    public int atrSense;
+    public int atrLuck;
+    public int levelBonusHP;
+    public float statMultiplier;
+    public SoulAttribute levelUpAttribute;
     public GameObject originalPrefab;
 
-    public DeadCharacterData(PTSoul soul, GameObject prefab)                                                 //constructor to copy data from a PTSoul
+    public DeadCharacterData(PTSoul soul, GameObject prefab)                                             //constructor to copy data from a PTSoul
     {
         name = soul.Name;
         type = soul.Type;
         level = soul.level;
-        maxHP = soul.maxHP;
-        attack = soul.attack;
-        defense = soul.defense;
-        dailywages = soul.dailywages;
         currentXp = soul.currentXp;
+        dailywages = soul.dailywages;
+        atrMight = soul.atrMight;
+        atrAgility = soul.atrAgility;
+        atrConstitution = soul.atrConstitution;
+        atrSense = soul.atrSense;
+        atrLuck = soul.atrLuck;
+        levelBonusHP = soul.levelBonusHP;
+        statMultiplier = soul.statMultiplier;
+        levelUpAttribute = soul.levelUpAttribute;
         originalPrefab = prefab;
     }
 
-    public void ApplyTo(PTSoul soul, float statPenalty = 0.9f)                                               //restore character data onto a PTSoul with optional stat penalty
+    public void ApplyTo(PTSoul soul, float statPenalty = 0.9f)                                           //restore character data onto a PTSoul with optional stat penalty
     {
         soul.Name = name;
         soul.Type = type;
         soul.level = level;
-        soul.maxHP = Mathf.RoundToInt(maxHP * statPenalty);                                                  //apply stat penalty
-        soul.currentHP = soul.maxHP;                                                                         //resurrect at full HP
-        soul.attack = Mathf.RoundToInt(attack * statPenalty);                                                //apply stat penalty
-        soul.defense = Mathf.RoundToInt(defense * statPenalty);                                              //apply stat penalty
-        soul.dailywages = dailywages;
         soul.currentXp = currentXp;
-        soul.xpToNextLevel = (soul.level + 1) * 50;
-        soul.markedByDeath = true;                                                                           //mark as resurrected
-        soul.isCowardly = false;                                                                             //resurrected souls are fearless
-        soul.UpdateUI();
+        soul.dailywages = dailywages;
+        soul.atrMight = atrMight;
+        soul.atrAgility = atrAgility;
+        soul.atrConstitution = atrConstitution;
+        soul.atrSense = atrSense;
+        soul.atrLuck = atrLuck;
+        soul.levelBonusHP = levelBonusHP;
+        soul.levelUpAttribute = levelUpAttribute;
+        soul.statMultiplier = statMultiplier * statPenalty;                                              //apply stat penalty, it stays on the soul so it survives level ups
+        soul.isAdversary = false;
+        soul.markedByDeath = true;                                                                       //mark as resurrected
+        soul.isCowardly = false;                                                                         //resurrected souls are fearless
+        soul.FinishSetup();                                                                              //recalculate stats, resurrect at full HP, and stop Start() overwriting this data
     }
 }
 
-public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions                                //inherit from MonoBehaviour and implement the IPlayerActions interface from the SimpleControls input actions
+public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions                            //inherit from MonoBehaviour and implement the IPlayerActions interface from the SimpleControls input actions
 {
+    public enum GameState { Town, Combat, GameOver }                                                     //what the game is doing right now, decides which actions are allowed
 #region Variables
   public bool debugMode = false;                                                                             //bool for debug toggling 
 
@@ -78,7 +94,9 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
   public AudioClip BGMusic;                                                                                  //AudioClip for background music
   public AudioClip goldSound;                                                                                //AudioClip for gold sound effect
   public GameObject Sun;                                                                                     //Reference to the sun onject for changing instensity when sleeping
-  public string partyName = "The Adventurers";                                                               //variable string for the party name
+    public string partyName = "The Adventurers";                                                         //variable string for the party name
+    [Tooltip("Build the clickable action bar on start. Turn off if you replace it with your own UI.")]
+    public bool buildActionBar = true;
 #endregion
 
 #region UI References and Messages
@@ -96,19 +114,19 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
     "You don't sleep at all this night, you feel lethargic and worn out."
   };                                                                                                         // possible sleep messages
 
-  public bool canSleep = true;                                                                               //bool to check if sleeping is allowed  
+    public GameState State { get; private set; } = GameState.Town;                                       //current game state, replaces the old canSleep/gameOver flags
   public bool hasFought = false;                                                                             //bool to check if the player has fought
   public bool hasHealed = false;                                                                             //bool to check if the player has healed
   public bool hasBeenBlessed = false;
-  public bool gameOver = false;                                                                              //bool to check if the game is over  
   public int daysWithoutGold = 0;                                                                            //integer tracking consecutive days the party has had no gold, game over after 3
   
 
   private SimpleControls controls;                                                                           //reference to the input controls
   private AudioSource audioSource;                                                                           //reference to the AudioSource component
-  private HashSet<string> deadCharacterNames = new HashSet<string>();                                       //tracks names of deceased characters to prevent respawning
   private List<DeadCharacterData> deadCharacters = new List<DeadCharacterData>();                           //stores full data of dead characters for resurrection
-  private PTSoulGen soulGen;                                                                                 //reference to the soul generator for spawning recruits and enemies
+    private PTSoulGen soulGen;                                                                           //reference to the soul generator for spawning recruits and enemies
+    private PTActionBar actionBar;                                                                       //clickable buttons for every action, built at runtime
+    private bool pointerOverUI = false;                                                                  //true while the mouse/touch is over a UI element, so UI clicks don't also count as attacks
 
 //constants for game balance and tuning
   private const int DAYS_UNTIL_MUTINY = 3;                                                                   //days without gold before game over
@@ -118,11 +136,16 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
   private const int BASE_RESURRECTION_COST = 100;                                                            //base gold cost for resurrection
   private const float THEFT_CHANCE_BROKE = 0.25f;                                                            //25% theft chance when broke
   private const float THEFT_CHANCE_NORMAL = 0.1f;                                                           //10% theft chance normally
-  private const float THEFT_PERCENT_BROKE = 0.1f;                                                           //10% of gold stolen when broke
-  private const float THEFT_PERCENT_NORMAL = 0.2f;                                                          //20% of gold stolen normally
+    private const float THEFT_PERCENT_BROKE = 0.2f;                                                      //20% of gold stolen when broke
+    private const float THEFT_PERCENT_NORMAL = 0.1f;                                                     //10% of gold stolen normally
   private const float FLEE_COST_PERCENT = 0.1f;                                                              //10% of gold to flee
   private const int RESURRECTION_UNLOCK_DAY = 7;                                                             //day when resurrection becomes available
-  private const int WEEKLY_BONUS_INTERVAL = 7;                                                               //days between weekly bonuses
+    private const int WEEKLY_BONUS_INTERVAL = 7;                                                         //days between weekly bonuses
+    private const float REST_HEAL_PERCENT = 0.25f;                                                       //share of max HP recovered overnight when wages are paid
+    private const int ENCOUNTER_GRACE_DAYS = 3;                                                          //for the first days, encounters have exactly as many enemies as party members
+    private const float ENCOUNTER_MAX_MULTIPLIER = 1.5f;                                                 //max enemies per encounter = party size x this (rounded up), before escalation
+    private const int ESCALATION_START_DAY = 7;                                                          //day the extra enemy escalation begins
+    private const int ESCALATION_EVERY_DAYS = 3;                                                         //one more potential enemy every this many days after escalation starts
 #endregion
 
 #region Initilization and Update
@@ -143,7 +166,11 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
             audioSource.Play();                                                                              //play the music
         }
 
-        soulGen = GetComponent<PTSoulGen>();                                                                  //get the soul generator component
+        soulGen = GetComponent<PTSoulGen>();                                                             //get the soul generator component
+        if (buildActionBar)
+        {
+            actionBar = PTActionBar.Create(this);                                                        //build the clickable action buttons
+        }
         SetSunIntensity(2f);                                                                                 //set initial sun intensity
 
         for (int i = 0; i < startingPartySize; i++)                                                          // Spawn random starting party members
@@ -165,9 +192,9 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         }
     }
 
-    void Update()                                                                                           //On Update
+    void Update()                                                                                        //On Update
     {
-        if (gameOver) return;                                                                               //skip if game is already over
+        pointerOverUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();    //cached here, it can't be queried reliably from inside input callbacks
     }
 
     void OnEnable()                                                                                         //Method for enabling the input controls
@@ -223,7 +250,11 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
             PartyNameText.text = partyName;                                                                   //display party name
         }
 
-        UpdateControlsDisplay();                                                                            //update contextual controls display
+        UpdateControlsDisplay();                                                                         //update contextual controls display
+        if (actionBar != null)
+        {
+            actionBar.Refresh();                                                                         //update action button labels, costs and availability
+        }
     }
 
     void UpdateControlsDisplay()                                                                            //Method to update controls display based on context
@@ -288,10 +319,11 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         UpdateUI();                                                                                         //automatically update UI whenever gold changes
     }
 
-    void TriggerGameOver(string message)                                                                    //Centralized method to trigger game over state
+    void TriggerGameOver(string message)                                                                 //Centralized method to trigger game over state
     {
         PTAdventureLog.Log(message + " Game Over.");
-        gameOver = true;
+        State = GameState.GameOver;
+        UpdateUI();
     }
 
     void SetSunIntensity(float intensity)                                                                   //Method to change the intensity of the sun on sleep 
@@ -315,7 +347,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         return;
     }
     
-    public void On_4(InputAction.CallbackContext context)                         //Debug method - Auto assign attribute points
+    public void On_4(InputAction.CallbackContext context)                                                //Debug method - grant the party 100 XP each, for testing level ups
     {
         if (!context.performed) return;
         if (!debugMode)
@@ -323,7 +355,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
             PTAdventureLog.Log("Debug mode is not enabled. Press 4 only works when Debug Mode is enabled in PTManager.");
             return;
         }
-        DebugAutoAssignAllAttributePoints();
+        DebugGrantPartyXP(100);
     }
 
     public void On_5(InputAction.CallbackContext context)

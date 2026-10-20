@@ -41,8 +41,8 @@ namespace PartyTaxes
         [Tooltip("XP pool awarded to the party when a soul of this type is defeated (split among members).")]
         public Vector2Int lifeXpRange = new Vector2Int(20, 40);
 
-        [Header("Level Scaling (added per level above 1)")]
-        [Tooltip("Bonus added to Might per level above 1. Use 0.5 to gain +1 every 2 levels.")]
+        [Header("Level Scaling (added per level above the minimum spawn level)")]
+        [Tooltip("Bonus added to Might per level above levelRange.x. Use 0.5 to gain +1 every 2 levels.")]
         public float bonusMightPerLevel        = 0f;
         [Tooltip("Bonus added to Agility per level above 1.")]
         public float bonusAgilityPerLevel      = 0f;
@@ -52,6 +52,10 @@ namespace PartyTaxes
         public float bonusSensePerLevel        = 0f;
         [Tooltip("Bonus added to Luck per level above 1.")]
         public float bonusLuckPerLevel         = 0f;
+
+        [Header("Level Up")]
+        [Tooltip("Attribute that gains +1 each time a soul of this type levels up (race affinity).")]
+        public SoulAttribute levelUpAttribute  = SoulAttribute.Constitution;
 
         [Header("Visual Appearance")]
         [Tooltip("Optional: Custom prefab for this soul type. If assigned, this prefab will be used instead of the base enemy prefab. Must have a PTSoul component.")]
@@ -64,14 +68,16 @@ namespace PartyTaxes
 
         /// <summary>
         /// Applies randomly rolled attributes (within this type's ranges) to the given soul,
-        /// then adds per-level bonuses based on the soul's rolled level.
+        /// then adds per-level bonuses based on the soul's rolled level (capped at maxLevel, e.g. the party level).
         /// Also sets soul.Type, isAdversary, level, goldReward and accumulatedLifeXp.
         /// </summary>
-        public void ApplyAttributes(PTSoul soul)
+        public void ApplyAttributes(PTSoul soul, int maxLevel = int.MaxValue)
         {
             soul.Type               = typeName;
             soul.isAdversary        = isAdversary;
-            soul.level              = Random.Range(levelRange.x, levelRange.y + 1);
+            soul.levelUpAttribute   = levelUpAttribute;
+            soul.levelBonusHP       = 0;
+            soul.level              = Mathf.Clamp(Random.Range(levelRange.x, levelRange.y + 1), 1, Mathf.Max(1, maxLevel));
             soul.goldReward         = Random.Range(goldRewardRange.x,  goldRewardRange.y  + 1);
             soul.accumulatedLifeXp  = Random.Range(lifeXpRange.x,      lifeXpRange.y      + 1);
 
@@ -82,15 +88,15 @@ namespace PartyTaxes
             soul.atrSense           = Random.Range(senseRange.x,        senseRange.y        + 1);
             soul.atrLuck            = Random.Range(luckRange.x,         luckRange.y         + 1);
 
-            // Apply per-level bonuses only when soul level exceeds the type's max spawn level
-            int levelsAboveMax = soul.level - levelRange.y;
-            if (levelsAboveMax > 0)
+            // Apply per-level bonuses for each level above the type's minimum spawn level (level is capped first)
+            int levelsAboveMin = soul.level - levelRange.x;
+            if (levelsAboveMin > 0)
             {
-                soul.atrMight        += Mathf.RoundToInt(bonusMightPerLevel        * levelsAboveMax);
-                soul.atrAgility      += Mathf.RoundToInt(bonusAgilityPerLevel      * levelsAboveMax);
-                soul.atrConstitution += Mathf.RoundToInt(bonusConstitutionPerLevel * levelsAboveMax);
-                soul.atrSense        += Mathf.RoundToInt(bonusSensePerLevel        * levelsAboveMax);
-                soul.atrLuck         += Mathf.RoundToInt(bonusLuckPerLevel         * levelsAboveMax);
+                soul.atrMight        += Mathf.RoundToInt(bonusMightPerLevel        * levelsAboveMin);
+                soul.atrAgility      += Mathf.RoundToInt(bonusAgilityPerLevel      * levelsAboveMin);
+                soul.atrConstitution += Mathf.RoundToInt(bonusConstitutionPerLevel * levelsAboveMin);
+                soul.atrSense        += Mathf.RoundToInt(bonusSensePerLevel        * levelsAboveMin);
+                soul.atrLuck         += Mathf.RoundToInt(bonusLuckPerLevel         * levelsAboveMin);
             }
         }
 

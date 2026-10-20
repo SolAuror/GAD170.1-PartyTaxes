@@ -44,4 +44,5 @@ MonoBehaviour:
   bonusConstitutionPerLevel: 0
   bonusSensePerLevel: 0
   bonusLuckPerLevel: 0
+  levelUpAttribute: 2
   customPrefab: {fileID: 4804566105690759036, guid: 3b3ba821b973df14e924797fe425d11f, type: 3}

@@ -92,7 +92,6 @@ public class PTSoulGen : MonoBehaviour                                          
 
         soul.level = 1;
         soul.currentXp = 0;
-        soul.xpToNextLevel = soul.level * 50;
 
         // Pick a random non-adversary soul type and apply its attribute ranges
         PTSoulTypeData typeData = null;
@@ -127,9 +126,7 @@ public class PTSoulGen : MonoBehaviour                                          
             soul.dailywages      = Random.Range(wageRange.x, wageRange.y + 1);
         }
 
-        soul.RecalculateStats();                                     // Recalculate HP, attack, defense from attributes
-        soul.currentHP = soul.maxHP;                                 // Start at full HP
-        soul.UpdateUI();                                             // Update UI to reflect new stats
+        soul.FinishSetup();                                          // Derive HP, attack, defense from attributes, start at full HP and update UI
     }
 
     /// Picks a random adversary PTSoulTypeData whose levelRange contains partyLevel.
@@ -164,13 +161,16 @@ public class PTSoulGen : MonoBehaviour                                          
     public void RandomizeEnemyStats(PTSoul soul, int partyLevel)
     {
         if (soul == null) return;
+        ApplyEnemyType(soul, PickEnemyType(partyLevel), partyLevel);
+    }
 
-        PTSoulTypeData typeData = PickEnemyType(partyLevel);
-
+    /// Rolls an enemy of the given type with its level capped at the party level (or a fully
+    /// random "Unknown" adversary when no type data exists), then finalizes its stats.
+    private void ApplyEnemyType(PTSoul soul, PTSoulTypeData typeData, int partyLevel)
+    {
         if (typeData != null)
         {
-            typeData.ApplyAttributes(soul);
-            soul.level = Mathf.Clamp(soul.level, 1, partyLevel); // Enemies can't spawn above party level
+            typeData.ApplyAttributes(soul, partyLevel);                      // Enemies can't spawn above party level
             PTSoulPrefix prefix = TryApplyPrefix(soul);
             soul.Name = GenerateNameForType(typeData, prefix);
         }
@@ -179,6 +179,7 @@ public class PTSoulGen : MonoBehaviour                                          
             soul.Name            = GenerateRandomName();
             soul.Type            = "Unknown";
             soul.isAdversary     = true;
+            soul.level           = Mathf.Max(1, soul.level);
             soul.atrMight        = Random.Range(1, 6);
             soul.atrAgility      = Random.Range(1, 6);
             soul.atrConstitution = Random.Range(1, 6);
@@ -186,11 +187,8 @@ public class PTSoulGen : MonoBehaviour                                          
             soul.atrLuck         = Random.Range(1, 6);
         }
 
-        soul.currentXp       = 0;
-        soul.xpToNextLevel   = (soul.level + 1) * 50;
-        soul.RecalculateStats();
-        soul.currentHP       = soul.maxHP;
-        soul.UpdateUI();
+        soul.currentXp = 0;
+        soul.FinishSetup();
     }
 
     /// Instantiates an enemy from enemyBasePrefab (or type-specific custom prefab),
@@ -223,25 +221,7 @@ public class PTSoulGen : MonoBehaviour                                          
         
         if (soul != null)
         {
-            // Apply stats using the picked type data
-            if (typeData != null)
-            {
-                typeData.ApplyAttributes(soul);
-                soul.level = Mathf.Clamp(soul.level, 1, partyLevel);
-                PTSoulPrefix prefix = TryApplyPrefix(soul);
-                soul.Name = GenerateNameForType(typeData, prefix);
-            }
-            else
-            {
-                RandomizeEnemyStats(soul, partyLevel);
-            }
-
-            soul.currentXp = 0;
-            soul.xpToNextLevel = (soul.level + 1) * 50;
-            soul.RecalculateStats();
-            soul.currentHP = soul.maxHP;
-            soul.UpdateUI();
-            
+            ApplyEnemyType(soul, typeData, partyLevel);                      // Apply stats using the picked type data
             enemyObj.name = soul.Name;
         }
         
@@ -301,7 +281,9 @@ public class PTSoulGen : MonoBehaviour                                          
 
         if (typeData != null)
         {
+            int keptLevel = soul.level;                                      // ApplyAttributes re-rolls level, keep the current one
             typeData.ApplyAttributes(soul);
+            soul.level = keptLevel;
             PTSoulPrefix prefix = TryApplyPrefix(soul);
             soul.Name = GenerateNameForType(typeData, prefix);
             soul.dailywages = typeData.HasWageOverride
@@ -319,8 +301,6 @@ public class PTSoulGen : MonoBehaviour                                          
             soul.dailywages      = Random.Range(wageRange.x, wageRange.y + 1) * soul.level;
         }
 
-        soul.RecalculateStats();                                     // Derive HP, attack, defense from attributes
-        soul.currentHP = soul.maxHP;
-        soul.UpdateUI();
+        soul.FinishSetup();                                          // Derive HP, attack, defense from attributes
     }
 }

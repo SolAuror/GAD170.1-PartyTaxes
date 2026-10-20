@@ -28,7 +28,7 @@ public class PTSoul : MonoBehaviour                                             
     public int atrConstitution;                                                                        //integer for the constitution attribute of the soul
     public int atrSense;                                                                               //integer for the sense attribute of the soul
     public int atrLuck;                                                                                //integer for the luck attribute of the soul
-    public int atrPoints = 0;                                                                //integer for unspent attribute points, starts at 0 and increases on level up
+    public SoulAttribute levelUpAttribute = SoulAttribute.Constitution;                                  //attribute that gains +1 on every level up, set from the soul type (race affinity)
 
     [Header("Character Stats")]                                                                     //info about the characters stats
     public int maxHP;                                                                               //integer for the maximum HP of the soul, derived from Constitution
@@ -37,7 +37,9 @@ public class PTSoul : MonoBehaviour                                             
     public int critChance;                                                                          //integer for the critical hit chance (%), derived from Luck
     public float critMultiplier;                                                                    //float for the critical hit damage multiplier, derived from Luck, Might and Sense
     public int defense;                                                                             //integer for the defense stat of the soul, derived from Constitution
-    public int dailywages = 20;                                                                     //integer for the daily wages of the soul
+    public int dailywages = 20;                                                                          //integer for the daily wages of the soul
+    public int levelBonusHP = 0;                                                                         //extra max HP earned from level ups, kept separate so it survives stat recalculation
+    public float statMultiplier = 1f;                                                                    //multiplier on max HP, attack and defense (0.9 for souls Marked by Death)
 
     [Header("Status Effects")]                                                                   
     public bool isAlive => currentHP > 0;                                                           //bool to check if the soul is alive
@@ -51,17 +53,30 @@ public class PTSoul : MonoBehaviour                                             
     public int accumulatedLifeXp = 25;                                                              //integer for the XP rewarded when this soul is defeated, it is the liftetime experience of the soul, 
                                                                                                     // mening it will reward more the longer it has been alive set to 10 default for a level 1 soul.
 
+    private const int PARTY_DEFENSE_BONUS = 3;                                                           //flat defense bonus for party members, since they take more hits than enemies
+    private const int HP_PER_LEVEL = 10;                                                                 //max HP gained on each level up
+    private const float LEVEL_UP_HEAL_PERCENT = 0.3f;                                                    //fraction of max HP restored on level up
+    private const float WAGE_GROWTH_PER_LEVEL = 1.25f;                                                   //daily wages are multiplied by this on each level up
+    private bool isInitialized = false;                                                                  //true once this soul has been set up, so Start() never overwrites generated or resurrected data
+
     public void Start()
     {
-        currentXp = 0;                                                                               //initialize current XP to 0 at the start of the game
-        xpToNextLevel = (level + 1) * 50;                                                           //initialize XP required for next level based on level formula
-        RecalculateStats();                                                                         //derive stats from attributes
-        if(!isAdversary)
-            {
-                defense += 3;                                                                 //Give party members a flat 3 defense bonus to make them more durable, since they will be taking more damage than enemies.
-            }
-        currentHP = maxHP;                                                                           //initialize current HP to max HP at the start of the game
-        UpdateUI();                                                                                  //initialize UI elements with starting values
+        if (!isInitialized)                                                                              //souls generated by PTSoulGen (or resurrected) are already set up before their first frame
+        {
+            currentXp = 0;                                                                               //initialize current XP to 0 at the start of the game
+            FinishSetup();
+        }
+    }
+
+    /// Finalizes a soul once its attributes and level are set: derives stats, fills HP and marks it as initialized.
+    /// Spawners call this straight after setting a soul up, so Start() running a frame later won't reset it.
+    public void FinishSetup()
+    {
+        xpToNextLevel = (level + 1) * 50;                                                                //XP required for next level based on level formula
+        RecalculateStats();                                                                              //derive stats from attributes
+        currentHP = maxHP;                                                                               //start at full HP
+        isInitialized = true;
+        UpdateUI();                                                                                      //initialize UI elements with starting values
     }
 
     private bool lastHitWasCrit = false;                                                          //tracks whether the last DealDamage call was a critical hit
@@ -103,7 +118,15 @@ public class PTSoul : MonoBehaviour                                             
         return amountHealed;
     }
 
-    public int Bless()                                 //method to fully heal the soul for extra money, but removes cowardly status if they have it
+    public int RestoreHP(int amount)                                                                     //method to restore HP without the cleric's cowardice penalty, e.g. resting overnight
+    {
+        int amountRestored = Mathf.Clamp(amount, 0, maxHP - currentHP);
+        currentHP += amountRestored;
+        UpdateUI();
+        return amountRestored;
+    }
+
+    public int Bless()                                                                                   //method to fully heal the soul for extra money, but removes cowardly status if they have it
     {
         if (isCowardly)                                              
         {
@@ -119,18 +142,18 @@ public class PTSoul : MonoBehaviour                                             
 
     /// Changes a specific attribute by the given amount, clamped between 1 and 99.
     /// Recalculates derived stats (HP, attack, defense) after the change.
-    public void ChangeAttribute(string attributeName, int amount)
+    public void ChangeAttribute(SoulAttribute attribute, int amount, bool recalculate = true)
     {
-        switch (attributeName.ToLower())
+        switch (attribute)
         {
-            case "might":       atrMight = Mathf.Clamp(atrMight + amount, 1, 99); break;
-            case "agility":     atrAgility = Mathf.Clamp(atrAgility + amount, 1, 99); break;
-            case "constitution": atrConstitution = Mathf.Clamp(atrConstitution + amount, 1, 99); break;
-            case "sense":       atrSense = Mathf.Clamp(atrSense + amount, 1, 99); break;
-            case "luck":        atrLuck = Mathf.Clamp(atrLuck + amount, 1, 99); break;
-            default: Debug.LogWarning("Unknown attribute: " + attributeName); return;
+            case SoulAttribute.Might:        atrMight        = Mathf.Clamp(atrMight        + amount, 1, 99); break;
+            case SoulAttribute.Agility:      atrAgility      = Mathf.Clamp(atrAgility      + amount, 1, 99); break;
+            case SoulAttribute.Constitution: atrConstitution = Mathf.Clamp(atrConstitution + amount, 1, 99); break;
+            case SoulAttribute.Sense:        atrSense        = Mathf.Clamp(atrSense        + amount, 1, 99); break;
+            case SoulAttribute.Luck:         atrLuck         = Mathf.Clamp(atrLuck         + amount, 1, 99); break;
         }
-        RecalculateStats();                                          // Recalculate derived stats after attribute change
+        if (!recalculate) return;                                                                        //callers changing several attributes can recalculate once at the end
+        RecalculateStats();                                                                              // Recalculate derived stats after attribute change
         UpdateUI();
     }
 
@@ -140,9 +163,9 @@ public class PTSoul : MonoBehaviour                                             
     public void RecalculateStats()
     {
         int previousMaxHP = maxHP;
-        maxHP = 60 + (atrConstitution * 10);                        // 60 base HP + 10 per Constitution
-        attack = atrMight * 4;                                       // 4 attack per Might
-        defense = atrConstitution * 2;                                // 2 defense per Constitution
+        maxHP = Mathf.RoundToInt((60 + (atrConstitution * 10) + levelBonusHP) * statMultiplier);         // 60 base HP + 10 per Constitution + level up bonus
+        attack = Mathf.RoundToInt(atrMight * 4 * statMultiplier);                                        // 4 attack per Might
+        defense = Mathf.RoundToInt(((atrConstitution * 2) + (isAdversary ? 0 : PARTY_DEFENSE_BONUS)) * statMultiplier); // 2 defense per Constitution, +3 for party members
         critChance = Mathf.Clamp(atrLuck * 3, 0, 75);               // 3% crit per Luck, capped at 75%
         critMultiplier = 1.5f + (atrLuck * 0.02f) + (atrMight * 0.02f) + (atrSense * 0.02f); // Base 1.5x + scaling from Luck, Might and Sense
         // Adjust current HP proportionally if maxHP changed
@@ -162,71 +185,20 @@ public class PTSoul : MonoBehaviour                                             
         UpdateUI();                                                  // Update UI after gaining XP
     }
 
-    public void LevelUp()                                            //method to handle leveling up
-    {   
-        int xpOverflow;
+    public void LevelUp()                                                                                //method to handle leveling up
+    {
         level++;
-        atrPoints++;
-        accumulatedLifeXp += currentXp;                              // Increase accumulated life XP by the currently held XP before it resets to 0.
-        xpOverflow = currentXp - xpToNextLevel;                      // Calculate XP overflow after leveling up
-        currentXp = xpOverflow;                                      // Set current XP to the overflow amount
-        xpToNextLevel = (level + 1) * 50;                            // Increase XP required for next level
-        RecalculateStats();                                          // Recalculate stats from attributes on level up
-        currentHP = Random.Range(currentHP + 10, maxHP);                // Restore HP by 10 on level up, capped at max
-        dailywages = Mathf.RoundToInt(dailywages * 1.25f);           // Increase daily wages by 25% on level up
+        accumulatedLifeXp += currentXp;                                                                  // Increase accumulated life XP by the currently held XP before it resets to 0.
+        currentXp = Mathf.Max(0, currentXp - xpToNextLevel);                                             // Carry over XP overflow (never negative when levelled up directly, e.g. new recruits)
+        xpToNextLevel = (level + 1) * 50;                                                                // Increase XP required for next level
+        ChangeAttribute(levelUpAttribute, 1, false);                                                     // +1 to this soul's affinity attribute
+        levelBonusHP += HP_PER_LEVEL;                                                                    // +10 max HP per level
+        RecalculateStats();                                                                              // Recalculate stats from attributes on level up
+        currentHP = Mathf.Min(maxHP, currentHP + Mathf.RoundToInt(maxHP * LEVEL_UP_HEAL_PERCENT));       // Restore 30% of max HP on level up, capped at max
+        dailywages = Mathf.RoundToInt(dailywages * WAGE_GROWTH_PER_LEVEL);                               // Increase daily wages by 25% on level up
         if(!isAdversary)
         {
-        PTAdventureLog.Log(Name + " leveled up! Their Daily wages are now " + dailywages + " gold."); // Log level up event
-        }
-    }
-
-    /// <summary>
-    /// Debug method to automatically assign all unspent attribute points.
-    /// Distributes points evenly across all attributes, with priority to Constitution and Might.
-    /// </summary>
-    public void AutoAssignAttributePoints()
-    {
-        if (atrPoints <= 0) return;
-
-        int pointsToSpend = atrPoints;
-        string[] priorityOrder = { "constitution", "might", "agility", "sense", "luck" }; // Priority order for spending
-        
-        while (pointsToSpend > 0)
-        {
-            bool pointsSpent = false;
-            
-            // Try to spend one point on each attribute in priority order
-            foreach (string attr in priorityOrder)
-            {
-                if (pointsToSpend <= 0) break;
-
-                // Check if attribute is not maxed out (99)
-                int currentValue = 0;
-                switch (attr)
-                {
-                    case "might":        currentValue = atrMight; break;
-                    case "agility":      currentValue = atrAgility; break;
-                    case "constitution": currentValue = atrConstitution; break;
-                    case "sense":        currentValue = atrSense; break;
-                    case "luck":         currentValue = atrLuck; break;
-                }
-
-                if (currentValue < 99)
-                {
-                    ChangeAttribute(attr, 1);
-                    atrPoints--;
-                    pointsToSpend--;
-                    pointsSpent = true;
-                }
-            }
-
-            // If no points could be spent (all attributes maxed), break to avoid infinite loop
-            if (!pointsSpent) break;
-        }
-
-        if (atrPoints == 0 && !isAdversary)
-        {
-            PTAdventureLog.Log("[DEBUG] Auto-assigned attribute points for " + Name + ".");
+            PTAdventureLog.Log(Name + " reached level " + level + "! +1 " + levelUpAttribute + " and +" + HP_PER_LEVEL + " max health. Their Daily wages are now " + dailywages + " gold."); // Log level up event
         }
     }
 
