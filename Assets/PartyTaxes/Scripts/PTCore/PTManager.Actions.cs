@@ -13,8 +13,6 @@ public partial class PTManager
     public bool PartyFull => partyMembers.Count >= maxPartyCount;
     public bool ResurrectionUnlocked => daysElapsed >= RESURRECTION_UNLOCK_DAY;
     public int FallenCount => deadCharacters.Count;
-    public bool AwaitingPartyInput => awaitingPartyInput;                                                    //true while a party member waits for Attack / Run Away
-    public string ActiveActorName => activeActor != null ? activeActor.Name : "";
 
     public int CheapestResurrectionCost                                                                      //resurrection picks a random fallen member, so show the lowest possible price
     {

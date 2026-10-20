@@ -90,7 +90,6 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
   public List<PTSoul> adversaries = new List<PTSoul>();                                                      //list to store the enemies, using the PTSoul class for an individuals information.
   public int gold = 90;                                                                                      //integer # of gold
   public static event System.Action<int> OnGoldChanged;                                                     //event fired whenever gold changes, passes the new gold value
-  public int commission = 50;                                                                                //integer # gold bonus from surviving combat
   public int totalWages;                                                                                     //integer # for total calculated wages, party member count x character dailywages.
   public int daysElapsed = 0;                                                                                //integer # of days elapsed       
   public int partyCount => partyMembers.Count;                                                               //derived from list - always in sync
@@ -141,9 +140,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
   private const float FLEE_COST_PERCENT = 0.1f;                                                              //10% of gold to flee
   private const int RESURRECTION_UNLOCK_DAY = 7;                                                             //day when resurrection becomes available
     private const float REST_HEAL_PERCENT = 0.25f;                                                       //share of max HP recovered overnight when wages are paid
-    private const int ENCOUNTER_GRACE_DAYS = 3;                                                          //for the first days, encounters have exactly as many enemies as party members
-    private const float ENCOUNTER_MAX_MULTIPLIER = 1.25f;                                                //max enemies per encounter = party size x this (rounded up), before escalation
-    private const int ESCALATION_START_DAY = 8;                                                          //day the extra enemy escalation begins (week 2)
+    private const int ESCALATION_START_DAY = 8;                                                          //day the extra enemy escalation begins (week 2), for jobs that escalate
     private const int ESCALATION_EVERY_DAYS = 7;                                                         //one more potential enemy each week after escalation starts
 #endregion
 
@@ -178,6 +175,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         }
 
         RefreshTavern();                                                                                     //put the first candidates on the tavern board
+        RefreshJobBoard();                                                                                   //and the first contracts on the job board
         PTAdventureLog.Log("By order of the Queen: you will remit " + NextTributeAmount + " gold to her auditor at the end of day " + NextTributeDay +
                            ", and every week after, for " + RUN_LENGTH_DAYS + " days. Pay, and be pardoned. Fail twice, and hang.");
         dailyMsg = "Heil, <partyname>" + partyName + "</partyname>" +                                        //greet the party,
@@ -259,47 +257,43 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         }
     }
 
-    void UpdateControlsDisplay()                                                                            //Method to update controls display based on context
+    void UpdateControlsDisplay()                                                                         //Method to update controls display based on context
     {
-        if (controlsText == null) return;                                                                   //exit if controls text reference not assigned
+        if (controlsText == null) return;                                                                //exit if controls text reference not assigned
 
         string controls = "";
 
-        if (adversaries.Count > 0)                                                                          //in battle - show combat controls
+        if (State == GameState.Combat)                                                                   //in battle - combat plays itself, these are the interventions
         {
-            controls = "<b>COMBAT</b>\n";
-            if (awaitingPartyInput && activeActor != null)                                                  //if waiting for player action on their turn
-            {
-                controls += "Left Click - Attack\n";
-                controls += "R - Run Away\n";
-            }
-            else                                                                                            //enemy turn or between turns
-            {
-                controls += "Waiting for turn...\n";
-            }
+            controls = "<b>COMBAT</b> (" + stance + ")\n";
+            controls += "1 - Hazard Pay\n";
+            controls += "Q - Potion\n";
+            controls += "3 - Bribe\n";
+            controls += "F - Focus Fire\n";
+            if (CanRetreat) controls += "R - Retreat\n";
+            controls += "Spacebar - Speed (" + Speed + ")\n";
         }
-        else                                                                                                //in town - show town controls
+        else                                                                                             //in town - show town controls
         {
             controls = "<b>TOWN</b>\n";
-            controls += "E - Encounter Enemy\n";
+            controls += "E - Job Board\n";
             controls += "Spacebar - Sleep\n";
             controls += "F - Tavern (hire)\n";
-            if (!hasHealed)                                                                                 //only show heal option if the player has not healed yet today
+            if (!hasHealed)                                                                              //only show heal option if the player has not healed yet today
             {
                 controls += "Q - Heal Party\n";
             }
-             if (!hasBeenBlessed)                                                                             //only show bless option if the player has not blessed yet today
+            if (!hasBeenBlessed)                                                                         //only show bless option if the player has not blessed yet today
             {
                 controls += "1 - Bless Party\n";
             }
-
-            if (daysElapsed >= RESURRECTION_UNLOCK_DAY)                                                      //only show resurrect after it unlocks on day 7
+            if (daysElapsed >= RESURRECTION_UNLOCK_DAY)                                                  //only show resurrect after it unlocks on day 7
             {
                 controls += "3 - Resurrect\n";
             }
         }
 
-        controlsText.text = controls;                                                                       //update the controls text
+        controlsText.text = controls;                                                                    //update the controls text
     }
 
     void ChangeGold(int amount)                                                                             //Method to change gold amount, takes an integer amount as a parameter (positive or negative)

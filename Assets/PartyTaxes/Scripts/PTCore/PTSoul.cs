@@ -41,12 +41,14 @@ public class PTSoul : MonoBehaviour                                             
     public int baseWage = 0;                                                                             //wage at level 1, level up raises are a share of this (set automatically if 0)
     public int levelBonusHP = 0;                                                                         //extra max HP earned from level ups, kept separate so it survives stat recalculation
     public float statMultiplier = 1f;                                                                    //multiplier on max HP, attack and defense (0.9 for souls Marked by Death)
+    public float healthMultiplier = 1f;                                                                  //extra max HP multiplier, used for bosses
+    public float attackMultiplier = 1f;                                                                  //extra attack multiplier, used for bosses
+    public bool isBoss = false;                                                                          //bosses can't be bribed, and you can't retreat from them
 
     [Header("Status Effects")]                                                                   
     public bool isAlive => currentHP > 0;                                                           //bool to check if the soul is alive
     public bool isCowardly = false;                                                                   //bool to determine if the soul is cowardly, -could apply to enemies later
     public bool markedByDeath = false;                                                              //bool to track if character was resurrected, suffers stat penalties and cannot become cowardly
-    public bool hasFled = false;                                                                         //bool to track if character fled from combat during the current battle
     [System.NonSerialized] public PTEmployeeRecord employment;                                           //loyalty, greed and pay history for party members (null for enemies)
 
     [Header("Enemy Attributes")]                                                                    //Header for visiual seperation in the inspector
@@ -166,8 +168,8 @@ public class PTSoul : MonoBehaviour                                             
     public void RecalculateStats()
     {
         int previousMaxHP = maxHP;
-        maxHP = Mathf.RoundToInt((60 + (atrConstitution * 10) + levelBonusHP) * statMultiplier);         // 60 base HP + 10 per Constitution + level up bonus
-        attack = Mathf.RoundToInt(atrMight * 4 * statMultiplier);                                        // 4 attack per Might
+        maxHP = Mathf.RoundToInt((60 + (atrConstitution * 10) + levelBonusHP) * statMultiplier * healthMultiplier); // 60 base HP + 10 per Constitution + level up bonus
+        attack = Mathf.RoundToInt(atrMight * 4 * statMultiplier * attackMultiplier);                     // 4 attack per Might
         defense = Mathf.RoundToInt(((atrConstitution * 2) + (isAdversary ? 0 : PARTY_DEFENSE_BONUS)) * statMultiplier); // 2 defense per Constitution, +3 for party members
         critChance = Mathf.Clamp(atrLuck * 3, 0, 75);               // 3% crit per Luck, capped at 75%
         critMultiplier = 1.5f + (atrLuck * 0.02f) + (atrMight * 0.02f) + (atrSense * 0.02f); // Base 1.5x + scaling from Luck, Might and Sense

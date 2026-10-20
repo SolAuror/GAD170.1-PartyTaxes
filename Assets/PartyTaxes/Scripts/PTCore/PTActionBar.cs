@@ -14,7 +14,7 @@ namespace PartyTaxes
     /// </summary>
     public class PTActionBar : MonoBehaviour
     {
-        public enum View { Main, Tavern, Ledger }
+        public enum View { Main, Jobs, Tavern, Ledger }
 
         private const float PanelWidth   = 440f;
         private const float ButtonHeight = 40f;
@@ -40,6 +40,11 @@ namespace PartyTaxes
         public void ToggleTavern()
         {
             SetView(view == View.Tavern ? View.Main : View.Tavern);
+        }
+
+        public void ToggleJobs()
+        {
+            SetView(view == View.Jobs ? View.Main : View.Jobs);
         }
 
         private void SetView(View newView)
@@ -87,29 +92,26 @@ namespace PartyTaxes
                 switch (manager.State)
                 {
                     case PTManager.GameState.Town:     header.text = "Day " + manager.daysElapsed + " of " + manager.RunLengthDays + " - Town"; break;
-                    case PTManager.GameState.Combat:   header.text = "Battle!"; break;
+                    case PTManager.GameState.Combat:   header.text = "Battle! Round " + manager.CombatRound; break;
                     case PTManager.GameState.GameOver: header.text = "Game Over"; break;
-                    case PTManager.GameState.Victory:  header.text = "Pardoned!"; break;
+                    case PTManager.GameState.Victory:  header.text = manager.RunOutcome + "!"; break;
                 }
             });
 
             TextMeshProUGUI status = PTUIFactory.CreateLabel("Status", panel, 18f, TextAlignmentOptions.Center, 44f);
             Bind(status.gameObject, () => !manager.IsRunOver, () =>
-                status.text = manager.TributeStatus + "\nPayroll tonight " + manager.PayrollTonight + "g  ·  Average loyalty " +
-                              Mathf.RoundToInt(manager.AverageLoyalty));
+                status.text = InCombat()
+                    ? (manager.ActiveJob != null ? manager.ActiveJob.jobName + " (" + manager.JobPay(manager.ActiveJob) + "g)" : "Ambush!") +
+                      "\n" + manager.stance + " stance  ·  Gold " + manager.gold
+                    : manager.TributeStatus + "\nPayroll tonight " + manager.PayrollTonight + "g  ·  Average loyalty " +
+                      Mathf.RoundToInt(manager.AverageLoyalty));
 
             BuildConfrontation(panel);
             BuildMainView(panel);
+            BuildJobsView(panel);
             BuildTavernView(panel);
             BuildLedgerView(panel);
-
-            // Combat
-            AddButton(panel, InCombat, () => manager.AwaitingPartyInput,
-                () => manager.AwaitingPartyInput ? manager.ActiveActorName + " attacks  [Click]" : "Enemies are acting...",
-                manager.TryAttack);
-            AddButton(panel, InCombat, () => manager.AwaitingPartyInput,
-                () => "Run away  -" + manager.FleeCost + "g  [R]",
-                manager.TryRunAway);
+            BuildCombatView(panel);
 
             // Run over
             AddButton(panel, () => manager.IsRunOver, () => true, () => "Start a new run  [Esc]", manager.RestartRun);
@@ -136,8 +138,11 @@ namespace PartyTaxes
         {
             Func<bool> main = () => ShowView(View.Main);
             AddButton(panel, main, () => !manager.hasFought,
-                () => manager.hasFought ? "Already hunted today" : "Hunt goblins  [E]",
-                manager.TryEncounter);
+                () => manager.hasFought ? "Already worked today" : "Job board: " + manager.JobBoard.Count + " contracts  [E]",
+                () => SetView(View.Jobs));
+            AddButton(panel, main, () => true,
+                () => "Stance: " + manager.stance + "  (click to change)",
+                manager.CycleStance);
             AddButton(panel, main, () => true,
                 () => "Tavern: " + manager.TavernCandidates.Count + " for hire  [F]",
                 () => SetView(View.Tavern));
@@ -155,6 +160,50 @@ namespace PartyTaxes
                 () => manager.FallenCount == 0 ? "No fallen to raise" : "Resurrect  -" + manager.CheapestResurrectionCost + "g+  [3]",
                 manager.TryResurrect);
             AddButton(panel, main, () => true, SleepLabel, manager.TrySleep);
+        }
+
+        private void BuildJobsView(RectTransform panel)
+        {
+            Func<bool> jobs = () => ShowView(View.Jobs);
+            for (int i = 0; i < 4; i++)                                                    // three contracts, plus the Goblin King on the last day
+            {
+                int slot = i;
+                Func<bool> visible = () => jobs() && slot < manager.JobBoard.Count;
+                TextMeshProUGUI info = PTUIFactory.CreateLabel("Job", panel, 18f, TextAlignmentOptions.Left, 46f);
+                Bind(info.gameObject, visible, () =>
+                {
+                    PTJob job = manager.JobBoard[slot];
+                    string risk = job.risk == JobRisk.High ? "<color=#FF8080>High risk</color>" : job.risk == JobRisk.Medium ? "Medium risk" : "Low risk";
+                    info.text = "<b>" + job.jobName + "</b>  ·  " + manager.JobPay(job) + "g  ·  " + risk + "\n<size=80%>" + job.description + "</size>";
+                });
+                AddButton(panel, visible, () => !manager.hasFought,
+                    () => manager.JobBoard[slot].kind == JobKind.Boss ? "Face the Goblin King (no retreat!)" : "Take this job",
+                    () => manager.TryTakeJob(slot), SmallButtonHeight);
+            }
+            AddButton(panel, jobs, () => !manager.hasFought, () => "Rest day  (no pay, recover 40% HP)", manager.TryRestDay);
+            AddButton(panel, jobs, () => true, () => "Back", () => SetView(View.Main));
+        }
+
+        private void BuildCombatView(RectTransform panel)
+        {
+            AddButton(panel, InCombat, () => !manager.HazardPaidThisRound && manager.gold >= manager.HazardPayCost,
+                () => "Hazard pay: +25% damage  -" + manager.HazardPayCost + "g  [1]",
+                manager.TryHazardPay);
+            AddButton(panel, InCombat, () => !manager.PotionUsedThisRound && manager.gold >= manager.PotionCost && manager.PotionTarget != null,
+                () => manager.PotionTarget != null ? "Potion for " + manager.PotionTarget.Name + "  -" + manager.PotionCost + "g  [Q]" : "Potion",
+                manager.TryPotion);
+            AddButton(panel, InCombat, () => !manager.BribedThisRound && manager.BribeTarget != null && manager.gold >= manager.BribeCost,
+                () => manager.BribeTarget != null ? "Bribe " + manager.BribeTarget.Name + " to leave  -" + manager.BribeCost + "g  [3]" : "The King can't be bought",
+                manager.TryBribe);
+            AddButton(panel, InCombat, () => !manager.FocusOrderedThisRound && manager.FocusCandidate != null,
+                () => manager.FocusCandidate != null ? "Focus fire on " + manager.FocusCandidate.Name + "  [F]" : "Focus fire",
+                manager.TryFocusFire);
+            AddButton(panel, InCombat, () => manager.CanRetreat,
+                () => manager.CanRetreat ? "Sound the retreat  -" + manager.RetreatCost + "g, no pay  [R]" : "No retreat from the King!",
+                manager.TryRetreat);
+            AddButton(panel, InCombat, () => true,
+                () => "Speed: " + (manager.Speed == PTManager.CombatSpeed.Normal ? "1x" : manager.Speed == PTManager.CombatSpeed.Fast ? "2x" : "Skip") + "  [Space]",
+                manager.CycleCombatSpeed);
         }
 
         private string SleepLabel()

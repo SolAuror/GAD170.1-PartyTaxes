@@ -227,7 +227,7 @@ Do these alongside Phase 0. They're small now and expensive later.
 |---|---|---|---|
 | **0 · Stabilise** ✅ | Fix the §3.6 bugs. Level-ups grant stats. Overnight regen. `GameState` + `SoulData` split. Clickable UI. Update the README. | 1 wk | 📊 Median run > 12 days. Day-1 wipe < 3%. |
 | **1 · The Ledger (vertical slice)** ✅ | Hiring board, fire, individual payroll, Loyalty/Greed theft + Audit, Queen's tribute + 28-day win, Final Ledger screen. | 2–3 wks | Playtesters can explain *why* they lost. 📊 Endings: ≥ 50% economic (tribute/mutiny), ≤ 35% wipe. |
-| **2 · Combat rework** | Auto-combat + speed control, gold interventions, stances, job board (6–8 jobs). | 2 wks | Fight ≤ 45 s. ≤ 6 decisions per fight. |
+| **2 · Combat rework** ✅ | Auto-combat + speed control, gold interventions, stances, job board (6–8 jobs). | 2 wks | Fight ≤ 45 s. ≤ 6 decisions per fight. |
 | **3 · Variety** | 15–20 traits, 30+ night events, wage negotiation, 3 Accusations, Audit levels 1–5. | 2 wks | Two runs on different seeds feel different by day 3. |
 | **4 · Ship** | WebGL, title/settings/tutorial, audio pass, itch page, a closed playtest of 10+ people, then launch. | 1–2 wks | Average session ≥ 25 min. ≥ 30% of testers start a second run. |
 
@@ -265,6 +265,20 @@ Do these alongside Phase 0. They're small now and expensive later.
 | Verification | `Tools/HeadlessTests`: 54 behaviour checks, including a full night sequence. **Not yet run in the Unity editor** |
 
 Open question for playtests: scripted players almost never trigger mutiny (3%), because they always pay when they can. Watch whether humans deliberately stiff people, and whether the loyalty warnings come early enough to read.
+
+### Phase 2 status (v0.7)
+
+| Item | Status |
+|---|---|
+| Auto-combat + speed | ✅ Coroutine-driven rounds with a pause for interventions; 1× / 2× / Skip. Click-to-attack and per-member flee removed |
+| Stances | ✅ Aggressive / Balanced / Cautious change damage dealt and taken, and targeting (weakest / random / biggest hitter) |
+| Gold interventions | ✅ Hazard pay, potion, bribe, focus fire, retreat, each once per round. Town keys are reused in battle |
+| Job board | ✅ 6 contracts plus a rest day, 3 drawn each morning by weight and min day; escorts can pass quietly. A `[Serializable]` class array on PTManager (matching the prefix pattern) instead of ScriptableObject assets: editable in the Inspector, and no hand-written `.asset` files |
+| Goblin King (moved from Phase 1) | ✅ Day 28 only; boss with 14× HP and 3× attack plus guards; **no retreat, no bribes**; win it and pay the final tribute to be **Vindicated** (+500 score) |
+| Exit criteria | ✅ 📊 Fights 17–22 s average at 1× (p90 27–34 s), 1.0–1.4 decisions per fight. Outcome bands held: accountant 30% won / 61% economic / 9% slain |
+| Verification | `Tools/HeadlessTests`: 76 checks; the stubbed `StartCoroutine` now runs battles to completion, so whole auto-fights are tested headless. **Not yet run in the Unity editor** |
+
+Watch in playtests: whether the 0.6 s round pause is long enough to react at 1× (it's a serialized field), and whether the King feels fair. He wins ~30% of the fights players choose to take.
 
 **If time is short:** Phase 0 plus the Queen's tribute, Loyalty/Greed theft, the hiring board, and night events (as plain text, no new art) are enough for a strong jam-scale itch release. The theme is carried by systems, not content.
 

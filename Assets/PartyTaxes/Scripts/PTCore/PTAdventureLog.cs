@@ -23,6 +23,9 @@ public class PTAdventureLog : MonoBehaviour
     [Header("Timing")]
     [SerializeField, Tooltip("Delay in seconds between log messages for readability")]
     private float logMessageDelay = 0.4f;
+    private const int CATCH_UP_BACKLOG = 3;                                                              //more queued messages than this: speed up
+    private const float CATCH_UP_DELAY_SCALE = 0.2f;                                                     //...to 20% of the normal delay
+    private const int CATCH_UP_FLUSH_BACKLOG = 30;                                                       //more than this: print immediately
     
     private readonly List<string> logEntries = new List<string>();                         // Store raw log entries in a readonly list of strings.        -Could be used for a potential future saving/loading system. 
     private readonly List<TextMeshProUGUI> visualEntries = new List<TextMeshProUGUI>();    //store visual log entries in a readonly list of TextMeshProUGUI objects.
@@ -259,9 +262,14 @@ public class PTAdventureLog : MonoBehaviour
             AddLogEntry(message);
             
             // Add delay before next message if there are more in queue
+            if (messageQueue.Count > CATCH_UP_FLUSH_BACKLOG)                                             //far behind (e.g. a skipped battle): show the rest at once
+            {
+                continue;
+            }
             if (messageQueue.Count > 0 && logMessageDelay > 0)
             {
-                yield return new WaitForSeconds(logMessageDelay);
+                float delay = messageQueue.Count > CATCH_UP_BACKLOG ? logMessageDelay * CATCH_UP_DELAY_SCALE : logMessageDelay; //speed up when messages pile up, so the log keeps pace with auto-combat
+                yield return new WaitForSeconds(delay);
             }
         }
         

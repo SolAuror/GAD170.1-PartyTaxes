@@ -1,4 +1,4 @@
-"""Monte Carlo model of Party Taxes combat + economy rules as implemented (v0.6 / Phase 1).
+"""Monte Carlo model of Party Taxes combat + economy rules as implemented (v0.7 / Phase 2).
 Mirrors PTManager/PTSoul/PTSoulGen constants, Prefab_Management.prefab overrides and
 SoulType_*.asset ranges -- update this file when those change.
 
@@ -6,9 +6,11 @@ Usage:
   python3 Tools/BalanceSim/party_taxes_sim.py            # report for the current rules
   python3 Tools/BalanceSim/party_taxes_sim.py --sweep    # try alternative tuning values
 
-Policies are simple scripted players: 'naive' spends freely and never audits; 'accountant'
-keeps a full party, banks for the Queen in the second half of each week, audits after thefts
-and rests when hurt; 'hoarder' never hires beyond a pair and banks everything.
+Policies are simple scripted players: 'naive' spends freely, takes the best-paying job, never
+audits or intervenes; 'accountant' keeps a full party, banks for the Queen in the second half of
+each week, audits after thefts, picks jobs by risk, fights Aggressive, buys potions, retreats
+from losing fights and takes the Goblin King when strong; 'hoarder' never hires beyond a pair,
+banks everything, fights Cautious and takes the safest job.
 """
 import math, random, statistics, sys
 from collections import Counter
@@ -31,19 +33,32 @@ ENEMY = {  # might, agi, con, sense, luck, levelRange, gold, xp, per-level bonus
 
 # Mirrors constants in PTManager.cs / PTSoul.cs. Override with --sweep to explore.
 RULES = dict(
-    START_GOLD=45, COMMISSION=45, PREFIX_CHANCE=0.15,
+    START_GOLD=45, PREFIX_CHANCE=0.15,
     HEAL_AMT=50, HEAL_COST=10,
     PARTY_DEF_BONUS=3,
     HP_PER_LEVEL=15, LEVEL_UP_HEAL=0.3,
     WAGE_RAISE=0.15, WAGE_COMPOUND=False,  # per level: compound x(1+raise), or linear +raise x base wage
     XP_POW=0.5,                          # XP to next level = 50*(level+1) * level^XP_POW
-    COMMISSION_PER_WEEK=25,              # commission grows each week of the run
     REST_HEAL_PAID=0.25,
-    GRACE_DAYS=3,                       # days on which spawn count == party size
-    SPAWN_MAX_MULT=1.25,                # max spawn = ceil(party * mult) + escalation
-    ESCALATION_START=8, ESCALATION_EVERY=7,
+    ESCALATION_START=8, ESCALATION_EVERY=7,   # +1 max enemy per week from day 8 (jobs that escalate)
+    # --- Phase 2: jobs, stances, interventions ---
+    JOBS=(  # name, risk, min_day, weight, enemies (min,max) x party, escalates, level bonus, ambush chance, pay (base, per week), loyalty, rest heal
+        ("Scouting patrol",      "Low",    1, 1.0, (0.5, 1.0),  False, 0, 1.0, (18, 9),  0, 0),
+        ("Clear a goblin nest",  "Medium", 1, 1.0, (1.0, 1.25), True,  0, 1.0, (30, 15), 0, 0),
+        ("Escort the tax wagon", "Low",    2, 0.8, (0.75, 1.0), False, 0, 0.5, (21, 9),  5, 0),
+        ("Raid the goblin hoard","High",   5, 0.8, (1.5, 1.75), True,  0, 1.0, (51, 24), 0, 0),
+        ("Hoblin war-camp",      "High",   8, 0.7, (1.0, 1.25), True,  3, 1.0, (66, 27), 0, 0),
+        ("Bounty: a Goblin Lord","High",  12, 0.6, (0.75, 1.0), False, 4, 1.0, (78, 30), 3, 0),
+    ),
+    BOARD_SIZE=3, REST_HEAL=0.4,                 # plus an always-available rest day
+    KING=dict(level_bonus=3, min_level=9, hp_mult=14.0, atk_mult=3.0, escorts=(0.75, 1.0), pay=400, score=500),
+    STANCE=dict(aggressive=(1.15, 1.25), balanced=(1.0, 1.0), cautious=(0.85, 0.8)),   # (damage dealt, damage taken)
+    POTION_COST=15, POTION_HEAL=40, HAZARD_COST=5, HAZARD_BONUS=0.25, HAZARD_LOYALTY=2,
+    BRIBE_MULT=2, RETREAT_COST=0.1, RETREAT_COWARD_BELOW=50,
+    ACTION_SECONDS=0.35, ROUND_PAUSE=0.6,        # 1x combat pacing
+
     # --- Phase 1: the Ledger ---
-    RUN_DAYS=28, TRIBUTE=(200, 350, 500, 700), STRIKES_TO_EXECUTION=2,
+    RUN_DAYS=28, TRIBUTE=(250, 450, 650, 900), STRIKES_TO_EXECUTION=2,
     CANDIDATES=3, SIGN_FEE_DAYS=2,      # signing fee = candidate wage x this
     LOYALTY_START=60,
     L_PAID=5, L_UNPAID=-15, L_ALLY_DIED=-10, L_KILL=3, L_WRONG_ACCUSE=-15, L_DOCKED=-10,
@@ -118,28 +133,69 @@ def next_tribute(day):
     week = (day - 1)//7
     return R["TRIBUTE"][week] if week < len(R["TRIBUTE"]) else 0
 
-def spawn_count(pc, day):
-    if day <= R["GRACE_DAYS"]: return pc
-    e0, ev = R["ESCALATION_START"], R["ESCALATION_EVERY"]
-    extra = 0 if day < e0 else (day-e0)//ev + 1
-    return random.randint(pc, math.ceil(pc*R["SPAWN_MAX_MULT"]) + extra)   # inclusive, mirrors GetEncounterSize
+def job_board(day):
+    pool = [j for j in R["JOBS"] if j[2] <= day]
+    board = []
+    while pool and len(board) < R["BOARD_SIZE"]:
+        j = random.choices(pool, weights=[x[3] for x in pool])[0]; board.append(j); pool.remove(j)
+    return board
 
-def fight(party, foes, ledger):
+def job_pay(job, day): return job[8][0] + job[8][1]*((day-1)//7)
+
+def job_foes(job, pc, avg_lvl, day):
+    lo, hi = job[4]
+    extra = (0 if day < R["ESCALATION_START"] else (day-R["ESCALATION_START"])//R["ESCALATION_EVERY"] + 1) if job[5] else 0
+    n = random.randint(max(1, math.ceil(pc*lo)), max(1, math.ceil(pc*hi)) + extra)    # mirrors GetEncounterSize(job)
+    return [enemy(avg_lvl + job[6]) for _ in range(n)]
+
+def king_foes(pc, avg_lvl):
+    k = R["KING"]
+    boss = enemy(max(k["min_level"], avg_lvl + k["level_bonus"]))
+    boss.maxhp = round(boss.maxhp*k["hp_mult"]); boss.hp = boss.maxhp; boss.atk = round(boss.atk*k["atk_mult"]); boss.gold *= 3
+    lo, hi = k["escorts"]
+    return [boss] + [enemy(avg_lvl) for _ in range(random.randint(math.ceil(pc*lo), math.ceil(pc*hi)))]
+
+def pick_target(foes, stance, focus):
+    if focus in foes: return focus
+    if stance == "aggressive": return min(foes, key=lambda f: f.hp)          # finish the weakest
+    if stance == "cautious": return max(foes, key=lambda f: f.atk)           # take out the biggest hitter
+    return random.choice(foes)
+
+def tactics(policy, party, foes, wallet, ledger, reserve, can_retreat=True):
+    """One decision point per round. Returns 'retreat' or None; spends from wallet."""
+    hp = sum(p.hp for p in party) / sum(p.maxhp for p in party)
+    if policy == "accountant":
+        weakest = min(party, key=lambda p: p.hp/p.maxhp)
+        if weakest.hp < weakest.maxhp*0.3 and wallet["gold"] - R["POTION_COST"] >= reserve:
+            wallet["gold"] -= R["POTION_COST"]; weakest.hp = min(weakest.maxhp, weakest.hp + R["POTION_HEAL"]); ledger["decisions"] += 1
+        if can_retreat and hp < 0.25 and len(foes) >= len(party):
+            return "retreat"
+    elif policy == "hoarder" and can_retreat and hp < 0.35:
+        return "retreat"
+    return None
+
+def fight(party, foes, ledger, stance="balanced", policy="naive", wallet=None, reserve=0, can_retreat=True):
+    dealt, taken = R["STANCE"][stance]
+    wallet = wallet if wallet is not None else {"gold": 0}
     while foes and party:
+        ledger["rounds"] += 1
+        if tactics(policy, party, foes, wallet, ledger, reserve, can_retreat) == "retreat":
+            wallet["gold"] -= int(wallet["gold"]*R["RETREAT_COST"]); ledger["decisions"] += 1; ledger["retreated"] = 1
+            return
         ps = sum(p.se for p in party)/len(party); es = sum(f.se for f in foes)/len(foes)
         for side in (("E","P") if es > ps else ("P","E")):
             if side == "P":
                 for p in sorted(party, key=lambda x: -x.se):
                     if not foes: break
                     if not p.alive: continue
-                    ledger["clicks"] += 1; t = random.choice(foes); t.take(p.deal())
+                    ledger["actions"] += 1; t = pick_target(foes, stance, None); t.take(round(p.deal()*dealt))
                     if not t.alive:
                         foes.remove(t); ledger["gold"] += t.gold; loyal(p, R["L_KILL"])
                         for q in party: q.gain(t.lifexp // len(party))
             else:
                 for f in sorted(foes, key=lambda x: -x.se):
                     if not party: break
-                    t = random.choice(party); t.take(f.deal())
+                    ledger["actions"] += 1; t = random.choice(party); t.take(round(f.deal()*taken))
                     if not t.alive:
                         party.remove(t)
                         for q in party: loyal(q, R["L_ALLY_DIED"])
@@ -149,9 +205,23 @@ def fight(party, foes, ledger):
 def value(s):                           # how good a hire looks to a scripted player: raw fighting strength
     return s.atk * s.maxhp * (1 + s.df/50)
 
+RISK = {"Low": 0, "Medium": 1, "High": 2}
+
+def choose_job(policy, board, party, day):
+    hp = sum(p.hp for p in party) / sum(p.maxhp for p in party)
+    if policy == "naive":
+        return max(board, key=lambda j: job_pay(j, day))
+    if policy == "hoarder":
+        return min(board, key=lambda j: (RISK[j[1]], -job_pay(j, day))) if hp >= 0.5 else None
+    allowed = 2 if len(party) >= 3 and hp >= 0.8 else (1 if hp >= 0.55 else (0 if hp >= 0.4 else -1))
+    ok = [j for j in board if RISK[j[1]] <= allowed]
+    return max(ok, key=lambda j: job_pay(j, day)) if ok else None      # None = rest day
+
+STANCE_OF = dict(naive="balanced", accountant="aggressive", hoarder="cautious")
+
 def run(policy):
     party = [hire(recruit()), hire(recruit())]; gold = R["START_GOLD"]; day = 1; strikes = 0
-    out = Counter(); missing = 0
+    out = Counter(); missing = 0; king = False
     while True:
         avg_lvl = sum(p.level for p in party)//len(party)
         wages = sum(p.wage for p in party)
@@ -181,22 +251,40 @@ def run(policy):
             affordable = [c for c in board if gold - c.wage*R["SIGN_FEE_DAYS"] >= reserve + c.wage]
             if affordable:
                 c = max(affordable, key=value); gold -= c.wage*R["SIGN_FEE_DAYS"]; party.append(hire(c))
-        # --- combat (a saver skips the hunt to recover when the party is badly hurt) ---
-        hurt = sum(p.hp for p in party) / sum(p.maxhp for p in party) < 0.5
-        if not (policy == "accountant" and hurt):
-            foes = [enemy(avg_lvl) for _ in range(spawn_count(len(party), day))]
-            ledger = Counter(); fight(party, foes, ledger)
-            out["clicks"] += ledger["clicks"]
-            if not party: return day, "wipe", out
-            gold += ledger["gold"] + R["COMMISSION"] + R["COMMISSION_PER_WEEK"]*((day-1)//7)
+        # --- the day's job ---
+        hp = sum(p.hp for p in party) / sum(p.maxhp for p in party)
+        job = choose_job(policy, job_board(day), party, day)
+        boss = (day == R["RUN_DAYS"] and policy == "accountant" and len(party) == 4 and hp >= 0.85
+                and gold >= next_tribute(day))
+        if boss or (job and random.random() < job[7]):
+            foes = king_foes(len(party), avg_lvl) if boss else job_foes(job, len(party), avg_lvl, day)
+            wallet = {"gold": gold}; ledger = Counter()
+            fight(party, foes, ledger, STANCE_OF[policy], policy, wallet, reserve, can_retreat=not boss)   # no retreat from the King
+            gold = wallet["gold"]
+            out["fights"] += 1; out["rounds"] += ledger["rounds"]; out["actions"] += ledger["actions"]; out["decisions"] += ledger["decisions"] + 1
+            out["seconds"] += ledger["actions"]*R["ACTION_SECONDS"] + ledger["rounds"]*R["ROUND_PAUSE"]
+            out["max_seconds"] = max(out["max_seconds"], ledger["actions"]*R["ACTION_SECONDS"] + ledger["rounds"]*R["ROUND_PAUSE"])
+            if boss: out["king_fights"] += 1
+            if not party: return day, ("slain_by_king" if boss else "wipe"), out
+            if ledger["retreated"]:
+                out["retreats"] += 1
+            else:
+                gold += ledger["gold"] + (R["KING"]["pay"] if boss else job_pay(job, day))
+                if boss: king = True
+                elif job[9]:
+                    for p in party: loyal(p, job[9])
+        elif job:
+            gold += job_pay(job, day)                       # the escort wasn't ambushed
+            for p in party: loyal(p, job[9])
         else:
             out["rest_days"] += 1
+            for p in party: p.hp = min(p.maxhp, p.hp + round(p.maxhp*R["REST_HEAL"]))
         # --- night: tribute, payroll, desertion, mutiny, rest, theft ---
         t = tribute_due(day)
         if t:
             if gold >= t:
                 gold -= t; out["tribute"] += t
-                if day >= R["RUN_DAYS"]: return day, "victory", out
+                if day >= R["RUN_DAYS"]: return day, ("vindicated" if king else "victory"), out
             else:
                 strikes += 1
                 if strikes >= R["STRIKES_TO_EXECUTION"] or day >= R["RUN_DAYS"]: return day, "executed", out
@@ -222,6 +310,7 @@ def run(policy):
         day += 1
 
 ECONOMIC = ("mutiny", "executed", "abandoned")
+SLAIN = ("wipe", "slain_by_king")
 
 def report(n=2000, seed=1, quiet=False):
     random.seed(seed); rows = {}
@@ -229,23 +318,31 @@ def report(n=2000, seed=1, quiet=False):
         res = [run(pol) for _ in range(n)]
         days = sorted(d for d,_,_ in res); ends = Counter(e for _,e,_ in res)
         econ = sum(ends[e] for e in ECONOMIC)/n
-        rows[pol] = dict(median=statistics.median(days), ends=ends, econ=econ, win=ends["victory"]/n, wipe=ends["wipe"]/n,
-                         day1=sum(1 for d,e,_ in res if e == "wipe" and d == 1)/n)
+        slain = sum(ends[e] for e in SLAIN)/n
+        wins = ends["victory"] + ends["vindicated"]
+        fights = sum(o["fights"] for *_,o in res) or 1
+        rows[pol] = dict(median=statistics.median(days), ends=ends, econ=econ, win=wins/n, wipe=slain, king=ends["vindicated"]/n,
+                         secs=sum(o["seconds"] for *_,o in res)/fights, decisions=sum(o["decisions"] for *_,o in res)/fights,
+                         max_secs=max(o["max_seconds"] for *_,o in res),
+                         day1=sum(1 for d,e,_ in res if e == "wipe" and d == 1)/n,
+                         king_fights=sum(o["king_fights"] for *_,o in res)/n)
         if not quiet:
             print(f"\n== policy: {pol}")
             print(f" days survived  median {statistics.median(days)}  p10 {days[n//10]}  p90 {days[9*n//10]}")
             print(f" endings        " + ", ".join(f"{k} {v/n:.0%}" for k,v in ends.most_common()))
-            print(f" economic {econ:.0%} | wipe {rows[pol]['wipe']:.0%} | victory {rows[pol]['win']:.0%} | day-1 wipes {rows[pol]['day1']:.1%}")
+            print(f" economic {econ:.0%} | wipe {rows[pol]['wipe']:.0%} | won {rows[pol]['win']:.0%} (vindicated {rows[pol]['king']:.0%}) | day-1 wipes {rows[pol]['day1']:.1%}")
+            print(f" per fight: {rows[pol]['secs']:.0f}s at 1x (longest {rows[pol]['max_secs']:.0f}s), {rows[pol]['decisions']:.1f} decisions; retreats/run {statistics.mean(o['retreats'] for *_,o in res):.1f}, rest days/run {statistics.mean(o['rest_days'] for *_,o in res):.1f}")
             print(f" per run: stolen {statistics.mean(o['stolen'] for *_,o in res):.0f}g, recovered {statistics.mean(o['recovered'] for *_,o in res):.0f}g, tribute paid {statistics.mean(o['tribute'] for *_,o in res):.0f}g")
     return rows
 
 def summary_line(rows):
-    return " | ".join(f"{p}: win {v['win']:>4.0%} econ {v['econ']:>4.0%} wipe {v['wipe']:>4.0%} med {v['median']:>4}" for p, v in rows.items())
+    return " | ".join(f"{p}: win {v['win']:>4.0%} (K {v['king']:>3.0%}) econ {v['econ']:>4.0%} wipe {v['wipe']:>4.0%} {v['secs']:>3.0f}s" for p, v in rows.items())
 
 if __name__ == "__main__":
     if "--sweep" in sys.argv:
-        grid = [dict(), dict(TRIBUTE=(150,300,450,650)), dict(TRIBUTE=(250,400,550,750)), dict(THEFT_SCALE=0.4),
-                dict(SIGN_FEE_DAYS=1), dict(L_UNPAID=-20), dict(COMMISSION_PER_WEEK=15), dict(WAGE_RAISE=0.2)]
+        grid = [dict(), dict(TRIBUTE=(200,400,600,800)), dict(TRIBUTE=(300,500,750,1000)), dict(THEFT_SCALE=0.4),
+                dict(STANCE=dict(aggressive=(1.2, 1.15), balanced=(1.0, 1.0), cautious=(0.85, 0.8))),
+                dict(KING=dict(RULES["KING"], hp_mult=10.0, atk_mult=2.5)), dict(POTION_COST=25), dict(RETREAT_COST=0.2)]
         for g in grid:
             R.clear(); R.update(RULES); R.update(g)
             print(f"{str(g) or 'baseline':34} {summary_line(report(n=800, quiet=True))}")

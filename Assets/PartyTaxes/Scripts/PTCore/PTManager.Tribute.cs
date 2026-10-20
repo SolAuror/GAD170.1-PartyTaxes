@@ -9,9 +9,10 @@ public partial class PTManager
 {
     private const int RUN_LENGTH_DAYS = 28;                                                                  //survive and pay the final tribute to be pardoned
     private const int TRIBUTE_INTERVAL_DAYS = 7;                                                             //the auditor arrives every 7th day
-    private static readonly int[] TRIBUTE_SCHEDULE = { 200, 350, 500, 700 };                                 //gold owed each week
+    private static readonly int[] TRIBUTE_SCHEDULE = { 250, 450, 650, 900 };                                 //gold owed each week
     private const int STRIKES_TO_EXECUTION = 2;                                                              //first missed tribute: seizure; second: the noose
     private const int VICTORY_SCORE_BONUS = 250;
+    private const int VINDICATED_SCORE_BONUS = 500;                                                          //on top of the victory bonus, for slaying the Goblin King
     private const int SCORE_PER_SURVIVOR = 25;
     private const int SCORE_PER_DEATH = 25;
 
@@ -47,7 +48,14 @@ public partial class PTManager
             PTAdventureLog.Log("The Queen's auditor counts out " + due + " gold and leaves satisfied.");
             if (daysElapsed >= RUN_LENGTH_DAYS)
             {
-                TriggerVictory("Four tributes paid in full. The Queen grudgingly signs your pardon, and you're free to go home.");
+                if (SlewGoblinKing)
+                {
+                    TriggerVictory("Four tributes paid and the Goblin King's head on a pike. The Queen publicly clears your name.", "Vindicated");
+                }
+                else
+                {
+                    TriggerVictory("Four tributes paid in full. The Queen grudgingly signs your pardon, and you're free to go home.", "Pardoned");
+                }
                 return false;
             }
             return true;
@@ -74,10 +82,10 @@ public partial class PTManager
         return true;
     }
 
-    void TriggerVictory(string message)                                                                      //the run is won
+    void TriggerVictory(string message, string outcome)                                                      //the run is won
     {
         PTAdventureLog.Log(message);
-        RunOutcome = "Pardoned";
+        RunOutcome = outcome;
         State = GameState.Victory;
         UpdateUI();
     }
@@ -89,7 +97,7 @@ public partial class PTManager
             int deaths = runLedger.Sum(r => r.timesDied);
             int survivors = partyMembers.Count;
             return TotalTributePaid + gold + survivors * SCORE_PER_SURVIVOR - deaths * SCORE_PER_DEATH +
-                   (State == GameState.Victory ? VICTORY_SCORE_BONUS : 0);
+                   (State == GameState.Victory ? VICTORY_SCORE_BONUS : 0) + (SlewGoblinKing ? VINDICATED_SCORE_BONUS : 0);
         }
     }
 }

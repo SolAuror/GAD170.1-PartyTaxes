@@ -1,6 +1,7 @@
 // Headless behaviour checks for the core Party Taxes rules. Run: dotnet run --project Tools/HeadlessTests
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using PartyTaxes;
 
@@ -80,10 +81,12 @@ static class Program
         var mgr = new PTManager();
         for (int i = 0; i < 4; i++) mgr.partyMembers.Add(MakeSoul(2, 2, 2, 2, 2, false, SoulAttribute.Might));
         var size = typeof(PTManager).GetMethod("GetEncounterSize", BindingFlags.Instance | BindingFlags.NonPublic);
-        (int min, int max) Range(int day) { mgr.daysElapsed = day; int lo = 99, hi = 0; for (int i = 0; i < 2000; i++) { int n = (int)size.Invoke(mgr, null); lo = Math.Min(lo, n); hi = Math.Max(hi, n); } return (lo, hi); }
-        Check(Range(1) == (4, 4) && Range(3) == (4, 4), "grace days: one enemy per party member");
-        Check(Range(4) == (4, 5), $"day 4, party of 4: 4-5 enemies (got {Range(4)})");
-        Check(Range(7) == (4, 5) && Range(8) == (4, 6) && Range(15) == (4, 7), $"escalation +1 each week from day 8 (got {Range(7)}, {Range(8)}, {Range(15)})");
+        var pool = PTJob.DefaultPool();
+        PTJob nest = pool[1], patrol = pool[0], raid = pool[3];
+        (int min, int max) Range(PTJob job, int day) { mgr.daysElapsed = day; int lo = 99, hi = 0; for (int i = 0; i < 2000; i++) { int n = (int)size.Invoke(mgr, new object[] { job }); lo = Math.Min(lo, n); hi = Math.Max(hi, n); } return (lo, hi); }
+        Check(Range(nest, 4) == (4, 5), $"goblin nest, party of 4: 4-5 enemies (got {Range(nest, 4)})");
+        Check(Range(nest, 7) == (4, 5) && Range(nest, 8) == (4, 6) && Range(nest, 15) == (4, 7), $"escalation +1 each week from day 8 (got {Range(nest, 7)}, {Range(nest, 8)}, {Range(nest, 15)})");
+        Check(Range(patrol, 15) == (2, 4) && Range(raid, 4) == (6, 7), $"job size multipliers: patrol 0.5-1x without escalation, raid 1.5-1.75x (got {Range(patrol, 15)}, {Range(raid, 4)})");
 
         // 8. State starts in town; costs exposed for the action bar
         Check(mgr.State == PTManager.GameState.Town, "game starts in Town state");
@@ -179,18 +182,18 @@ static class Program
         int[] dueDay = new int[29], dueAmount = new int[29];
         foreach (int d in new[] { 1, 6, 7, 8, 14, 15, 28 }) { m.daysElapsed = d; dueDay[d] = m.NextTributeDay; dueAmount[d] = m.NextTributeAmount; }
         Check(dueDay[1] == 7 && dueDay[7] == 7 && dueDay[8] == 14 && dueDay[28] == 28, "tribute falls due every 7th day");
-        Check(dueAmount[1] == 200 && dueAmount[8] == 350 && dueAmount[15] == 500 && dueAmount[28] == 700, "tribute schedule 200/350/500/700");
-        m.daysElapsed = 7; m.gold = 250;
-        Check((bool)Call(m, "CollectTribute") && m.gold == 50 && m.TotalTributePaid == 200, "paying tribute");
+        Check(dueAmount[1] == 250 && dueAmount[8] == 450 && dueAmount[15] == 650 && dueAmount[28] == 900, "tribute schedule 250/450/650/900");
+        m.daysElapsed = 7; m.gold = 300;
+        Check((bool)Call(m, "CollectTribute") && m.gold == 50 && m.TotalTributePaid == 250, "paying tribute");
         m.daysElapsed = 14; m.gold = 100;
         var bestPaid = m.partyMembers[1];
         Check((bool)Call(m, "CollectTribute") && m.TributeStrikes == 1 && m.gold == 0 && bestPaid.employment.status == EmploymentStatus.Seized && m.partyMembers.Count == 1,
               "first missed tribute: gold and best-paid hero seized");
         m.daysElapsed = 21;
         Check(!(bool)Call(m, "CollectTribute") && m.State == PTManager.GameState.GameOver && m.RunOutcome == "Hanged", "second missed tribute: hanged");
-        m = NewRun(10); m.daysElapsed = 28; m.gold = 800;
+        m = NewRun(10); m.daysElapsed = 28; m.gold = 1000;
         Check(!(bool)Call(m, "CollectTribute") && m.State == PTManager.GameState.Victory && m.RunOutcome == "Pardoned" && m.IsRunOver, "final tribute paid: pardoned");
-        Check(m.RunScore == 700 + 100 + 25 + 250, $"score = tribute + gold + survivors + pardon bonus (got {m.RunScore})");
+        Check(m.RunScore == 900 + 100 + 25 + 250, $"score = tribute + gold + survivors + pardon bonus (got {m.RunScore})");
         m.TryFire(m.partyMembers[0]);
         Check(m.partyMembers.Count == 1, "no actions once the run is over");
 
@@ -204,9 +207,9 @@ static class Program
         // A full night: tribute first, then payroll, rest, theft and a new morning
         m = NewRun(10, 10);
         foreach (var p in m.partyMembers) { p.employment.greed = 0f; p.currentHP = 50; }
-        m.daysElapsed = 7; m.gold = 215;
+        m.daysElapsed = 7; m.gold = 265;
         m.TrySleep();
-        Check(m.daysElapsed == 8 && m.TotalTributePaid == 200 && m.gold == 5 && m.UnpaidLastNight == 1, $"night: tribute paid before wages, one member left unpaid (gold {m.gold}, unpaid {m.UnpaidLastNight})");
+        Check(m.daysElapsed == 8 && m.TotalTributePaid == 250 && m.gold == 5 && m.UnpaidLastNight == 1, $"night: tribute paid before wages, one member left unpaid (gold {m.gold}, unpaid {m.UnpaidLastNight})");
         Check(m.partyMembers[0].currentHP > 50 && m.partyMembers[1].currentHP == 50, "only paid members rest overnight");
         m.daysElapsed = 9; m.partyMembers[0].employment.stolenUnrecovered = 5; m.partyMembers[0].atrSense = 1;
         for (int i = 0; i < 50 && m.PendingConfrontation == null; i++) { m.hasAudited = false; m.TryAudit(m.partyMembers[0]); }
@@ -218,5 +221,125 @@ static class Program
         var dead = m.partyMembers[0];
         Call(m, "RemovePartyMember", dead, EmploymentStatus.Slain, "Slain by test");
         Check(dead.employment.timesDied == 1 && m.FallenCount == 1 && m.runLedger.Count == 2, "slain members stay in the run ledger and can be raised");
+
+        Phase2Tests();
+    }
+
+    // ── Phase 2: jobs, auto-combat, stances, interventions ──────────────
+    static void SetPrivate(PTManager m, string property, object value) =>
+        typeof(PTManager).GetProperty(property, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).SetValue(m, value);
+
+    static PTSoul Enemy(string name, int might, int con, int gold = 5)
+    {
+        var e = MakeSoul(might, 2, con, 1, 1, true, SoulAttribute.Might);
+        e.Name = name; e.goldReward = gold; e.accumulatedLifeXp = 10;
+        return e;
+    }
+
+    static void Phase2Tests()
+    {
+        Console.WriteLine("\n-- Phase 2 --");
+        var pool = PTJob.DefaultPool();
+
+        // Job board
+        var m = NewRun(10, 10);
+        m.daysElapsed = 1; Call(m, "RefreshJobBoard");
+        Check(m.JobBoard.Count == 2 && m.JobBoard.All(j => j.minDay <= 1), $"day 1 board only offers day-1 jobs (got {m.JobBoard.Count})");
+        m.daysElapsed = 20; Call(m, "RefreshJobBoard");
+        Check(m.JobBoard.Count == 3 && m.JobBoard.Distinct().Count() == 3, "later boards draw 3 distinct contracts");
+        m.daysElapsed = 28; Call(m, "RefreshJobBoard");
+        Check(m.JobBoard.Count == 4 && m.JobBoard[3].kind == JobKind.Boss, "the Goblin King appears on day 28");
+        m.daysElapsed = 8;
+        Check(m.JobPay(pool[1]) == 45 && m.JobPay(m.goblinKingJob) == 400, $"job pay grows weekly (nest day 8 = {m.JobPay(pool[1])})");
+
+        // Quiet escort: paid without a fight
+        m = NewRun(10, 10); m.daysElapsed = 3; m.gold = 0;
+        var quiet = PTJob.DefaultPool()[2]; quiet.ambushChance = 0f;
+        var board = (List<PTJob>)typeof(PTManager).GetField("jobBoard", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(m);
+        board.Clear(); board.Add(quiet);
+        m.TryTakeJob(0);
+        Check(m.gold == m.JobPay(quiet) && m.hasFought && m.State == PTManager.GameState.Town && m.partyMembers[0].employment.loyalty == 65,
+              "an unambushed escort pays out and pleases the party");
+        m.TryRestDay();
+        Check(m.gold == m.JobPay(quiet), "only one job per day");
+
+        // Rest day
+        m = NewRun(10, 10); foreach (var p in m.partyMembers) p.currentHP = 20;
+        m.TryRestDay();
+        Check(m.partyMembers[0].currentHP == 20 + 36 && m.hasFought, $"rest day heals 40% of max HP (got {m.partyMembers[0].currentHP})");
+
+        // Stance targeting
+        m = NewRun(10, 10);
+        var weak = Enemy("Weak", 1, 1); var brute = Enemy("Brute", 8, 3);
+        weak.currentHP = 5;
+        m.adversaries.Add(brute); m.adversaries.Add(weak);
+        m.stance = PTManager.Stance.Aggressive;
+        Check(Call(m, "PickTarget") == weak, "Aggressive finishes the weakest enemy");
+        m.stance = PTManager.Stance.Cautious;
+        Check(Call(m, "PickTarget") == brute, "Cautious goes for the biggest hitter");
+
+        // A full auto-battle (the stub runs the coroutine to completion)
+        m = NewRun(10, 10, 10, 10); m.gold = 0; m.daysElapsed = 3;
+        foreach (var p in m.partyMembers) { p.atrMight = 8; p.RecalculateStats(); }
+        m.adversaries.Add(Enemy("Gob A", 1, 1, 4)); m.adversaries.Add(Enemy("Gob B", 1, 1, 6));
+        SetPrivate(m, "ActiveJob", pool[1]);
+        Call(m, "StartCombat");
+        Check(m.State == PTManager.GameState.Town && m.adversaries.Count == 0 && m.gold == 10 + m.JobPay(pool[1]) && m.ActiveJob == null && m.CombatRound >= 1,
+              $"auto-combat resolves to a win and pays loot + the job (gold {m.gold}, rounds {m.CombatRound})");
+
+        // A hopeless fight ends the run
+        m = NewRun(10); m.partyMembers[0].currentHP = 1;
+        m.adversaries.Add(Enemy("Ogre", 30, 30));
+        Call(m, "StartCombat");
+        Check(m.State == PTManager.GameState.GameOver && m.RunOutcome == "Slain", "losing everyone in battle ends the run");
+
+        // Interventions (coroutine paused so we can act mid-fight)
+        UnityEngine.MonoBehaviour.RunCoroutines = false;
+        m = NewRun(10, 10); m.gold = 200; m.partyMembers[0].currentHP = 10;
+        var big = Enemy("Big", 6, 2, 10); var small = Enemy("Small", 1, 1, 2);
+        m.adversaries.Add(big); m.adversaries.Add(small);
+        SetPrivate(m, "ActiveJob", pool[1]);
+        Call(m, "StartCombat");
+        m.TryPotion();
+        Check(m.partyMembers[0].currentHP == 50 && m.gold == 185 && m.PotionUsedThisRound, "potion heals the most hurt member by 40 for 15g");
+        m.TryPotion();
+        Check(m.gold == 185, "one potion per round");
+        m.TryHazardPay();
+        Check(m.gold == 175 && m.HazardPaidThisRound && m.partyMembers[1].employment.loyalty == 62, "hazard pay: 5g per member, +2 loyalty");
+        Check(m.BribeTarget == big && m.BribeCost == 35, $"bribe targets the toughest enemy for 15 + 2x loot (got {m.BribeCost})");
+        m.TryBribe();
+        Check(m.adversaries.Count == 1 && m.gold == 140 && m.State == PTManager.GameState.Combat, "bribed enemy leaves without loot");
+        m.TryFocusFire();
+        Check(Call(m, "PickTarget") == small && m.FocusOrderedThisRound, "focus fire overrides the stance target");
+        m.partyMembers[1].employment.loyalty = 30;
+        m.TryRetreat();
+        Check(m.State == PTManager.GameState.Town && m.gold == 126 && m.adversaries.Count == 0 && m.partyMembers[1].isCowardly && !m.partyMembers[0].isCowardly,
+              $"retreat: 10% of gold, no pay, low-loyalty members branded cowards (gold {m.gold})");
+
+        // The Goblin King: no retreat, no bribe
+        m = NewRun(10, 10); m.gold = 100;
+        var king = Enemy("Grubnak", 5, 5, 50); king.isBoss = true;
+        m.adversaries.Add(king);
+        SetPrivate(m, "ActiveJob", m.goblinKingJob);
+        Call(m, "StartCombat");
+        m.TryRetreat(); m.TryBribe();
+        Check(m.State == PTManager.GameState.Combat && m.adversaries.Count == 1 && m.gold == 100 && !m.CanRetreat, "no retreat from (or bribing) the Goblin King");
+        UnityEngine.MonoBehaviour.RunCoroutines = true;
+
+        // Boss multipliers
+        var b = Enemy("Boss", 4, 4); b.healthMultiplier = 14f; b.attackMultiplier = 3f; b.FinishSetup();
+        Check(b.maxHP == 100 * 14 && b.attack == 48 && b.defense == 8, $"boss multipliers scale HP and attack, not defense (HP {b.maxHP}, ATK {b.attack})");
+
+        // Vindicated ending
+        m = NewRun(10); m.daysElapsed = 28; m.gold = 1000;
+        SetPrivate(m, "SlewGoblinKing", true);
+        Call(m, "CollectTribute");
+        Check(m.State == PTManager.GameState.Victory && m.RunOutcome == "Vindicated" && m.RunScore == 900 + 100 + 25 + 250 + 500,
+              $"slaying the King then paying the Queen: Vindicated (score {m.RunScore})");
+
+        // Speed cycles Normal -> Fast -> Skip -> Normal
+        m = NewRun(10);
+        m.CycleCombatSpeed(); var s1 = m.Speed; m.CycleCombatSpeed(); var s2 = m.Speed; m.CycleCombatSpeed();
+        Check(s1 == PTManager.CombatSpeed.Fast && s2 == PTManager.CombatSpeed.Skip && m.Speed == PTManager.CombatSpeed.Normal, "combat speed cycles 1x, 2x, skip");
     }
 }

@@ -1,8 +1,8 @@
-# Party Taxes v0.6
+# Party Taxes v0.7
 
 > *A game about paying your empl— ...friends, to adventure with you on a quest to slay pests for the queen.*
 
-You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-infested frontier. You can't swing a sword, so you hire people who can, and pay them from a purse the Queen expects back with interest. Survive 28 days, pay her auditor every week, and you're pardoned. Fail twice and you hang. Meanwhile your own party is skimming from you.
+You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-infested frontier. You can't swing a sword, so you hire people who can, and pay them from a purse the Queen expects back with interest. Survive 28 days, pay her auditor every week, and you're pardoned. Slay the Goblin King too, and you're vindicated. Fail twice and you hang. Meanwhile your own party is skimming from you.
 
 ---------------------------------------------------------------------------------------
 
@@ -28,13 +28,13 @@ You're the Queen's accountant, convicted of embezzlement and exiled to a goblin-
 
 ## Controls
 
-Every action has a clickable button in the **action bar** on the right of the screen (showing costs and what's available right now). Hiring, payroll, audits and firing are mouse-only, from the **Tavern** and **Ledger** views. The keyboard shortcuts below still work.
+Every action has a clickable button in the **action bar** on the right of the screen (showing costs and what's available right now). Choosing jobs, hiring, payroll, audits and firing are mouse-only, from the **Job board**, **Tavern** and **Ledger** views. The keyboard shortcuts below still work. Combat plays itself; in battle the same keys trigger gold-spending interventions.
 
 ### Town
 | Key | Action |
 ---------------------------------------------------------------------------------------
 | `Space` | Sleep (advance day) |
-| `E` | Go on an encounter |
+| `E` | Open the job board |
 | `F` | Open the tavern's hiring board |
 | `Q` | Heal the party (cleric) |
 | `1` | Bless the party (cleric) |
@@ -44,15 +44,19 @@ Every action has a clickable button in the **action bar** on the right of the sc
 
 ### Combat
 ---------------------------------------------------------------------------------------
-| `Left Click` | Attack |
-| `R` | Run away |
+| `1` | Hazard pay (+25% party damage this round) |
+| `Q` | Potion for the most hurt member |
+| `3` | Bribe the toughest enemy to leave |
+| `F` | Focus fire on the biggest threat |
+| `R` | Sound the retreat |
+| `Space` | Combat speed: 1× / 2× / Skip |
 
 ---------------------------------------------------------------------------------------
 
 ## Gameplay Systems
 
 ### The Queen's Tribute (win condition)
-A run lasts **28 days**. At the end of every 7th day the Queen's auditor collects tribute: **200 / 350 / 500 / 700 gold**. It's taken *before* wages, so the Queen always gets paid first. Pay the fourth tribute on day 28 and you're **pardoned**.
+A run lasts **28 days**. At the end of every 7th day the Queen's auditor collects tribute: **250 / 450 / 650 / 900 gold**. It's taken *before* wages, so the Queen always gets paid first. Pay the fourth tribute on day 28 and you're **pardoned**; kill the Goblin King that day as well and you're **vindicated**.
 
 Miss a tribute and you get a **strike**: the auditor seizes all your gold and drags your best-paid hero off as collateral. A second strike, or missing the final tribute, gets you **hanged**.
 
@@ -84,16 +88,48 @@ Three candidates are on the board each morning, already at your party's average 
 You can fire anyone from the Ledger (it asks you to confirm). Severance is one day's wage; if you can't afford it, the rest of the party loses 10 loyalty.
 
 ### Day / Night Cycle
-Each day you can perform town actions and trigger one encounter. Sleeping runs the night in order: **tribute (on tribute days) → payroll → desertions → mutiny check → rest → theft**, then a new morning with the ledger count and fresh tavern candidates. Paid members recover 25% of their max HP overnight; unpaid members recover nothing.
+Each day you can perform town actions and take **one job** (or rest). Sleeping runs the night in order: **tribute (on tribute days) → payroll → desertions → mutiny check → rest → theft**, then a new morning with the ledger count, fresh tavern candidates and a new job board. Paid members recover 25% of their max HP overnight; unpaid members recover nothing.
+
+### Job Board
+Each morning **three contracts** are drawn (weighted) from the job pool, each showing its pay and risk. A **rest day** (no pay, +40% HP) is always available. Pay grows each week of the run.
+
+| Job | From day | Risk | Enemies (× party size) | Pay (base + per week) | Notes |
+|---|---|---|---|---|---|
+| Scouting patrol | 1 | Low | 0.5–1 | 18 + 9 | No weekly escalation |
+| Clear a goblin nest | 1 | Medium | 1–1.25 | 30 + 15 | |
+| Escort the tax wagon | 2 | Low | 0.75–1 | 21 + 9 | Only a 50% chance of a fight; +5 loyalty |
+| Raid the goblin hoard | 5 | High | 1.5–1.75 | 51 + 24 | |
+| Hoblin war-camp | 8 | High | 1–1.25 | 66 + 27 | Enemies roll 3 levels above the party |
+| Bounty: a Goblin Lord | 12 | High | 0.75–1 | 78 + 30 | Enemies +4 levels; +3 loyalty |
+| **Slay the Goblin King** | 28 | High | boss + 0.75–1 guards | 400 | 14× HP, 3× attack boss. **No retreat, no bribes** |
+
+Jobs that escalate get +1 max enemy each week from day 8. The pool is editable in the PTManager Inspector (*Job Board*).
 
 ### Combat
-Encounters spawn a scaled group of enemies based on party size and days elapsed (see *Enemy Spawn Scaling*). Each party member attacks a random enemy, then surviving enemies counter-attack. XP from each kill is split evenly between all party members. Winning pays loot plus a commission of **45 gold, +25 per week of the run**.
+Battles **play themselves**. Every round the side with the higher average Sense goes first, then everyone acts in Sense order. XP from each kill is split evenly between party members. Winning pays the job plus any loot.
+
+**Stance** (set in town) decides how the party fights:
+
+| Stance | Damage dealt | Damage taken | Targets |
+|---|---|---|---|
+| Aggressive | ×1.15 | ×1.25 | The weakest enemy (finish kills) |
+| Balanced | ×1 | ×1 | Random |
+| Cautious | ×0.85 | ×0.8 | The biggest hitter |
+
+**Interventions**, each once per round. There's a short pause at the start of every round to decide.
+
+| Intervention | Cost | Effect |
+|---|---|---|
+| Hazard pay | 5g × members | +25% party damage this round, +2 loyalty each |
+| Potion | 15g | Most hurt member +40 HP |
+| Bribe | 15g + 2× its loot | The toughest non-boss enemy leaves (no loot or XP) |
+| Focus fire | free | Everyone attacks the biggest threat until it falls |
+| Sound the retreat | 10% of gold | The fight ends with no pay; members below 50 loyalty become Cowardly |
+
+**Speed:** 1×, 2× or Skip (resolve instantly).
 
 ### Healing & Blessings
 The cleric can heal the party once per day for a small gold fee, restoring HP to each member. A full blessing costs significantly more but fully restores HP, removes the Cowardly debuff and gives +10 loyalty. Cowardly members receive 30% reduced healing from normal heals.
-
-### Fleeing
-Escape from battle at the cost of 10% of your current gold. All surviving (non-resurrected) party members are branded as Cowardly. No loot or commission is earned.
 
 ### Resurrection
 Unlocked on day 7. Pay 100 gold plus the fallen member's daily wages to resurrect a random dead party member. Resurrected members come back as themselves (same attributes, level, XP and employment record) at full health and 80 loyalty, with a permanent 10% penalty to max HP, attack and defense. They are **Marked by Death** and cannot become Cowardly.
@@ -104,13 +140,14 @@ Members gain XP from kills; each level needs `50 × (level+1) × √level` XP. E
 ### The Final Ledger
 When the run ends, win or lose, the books open: outcome, score, tribute paid, wages, theft and recoveries, and every hire's record (kills, loot, wages, what they stole, and how they left). The biggest thief is finally named.
 
-**Score** = tribute paid + gold kept + 25 per surviving member − 25 per death (+250 if pardoned).
+**Score** = tribute paid + gold kept + 25 per surviving member − 25 per death (+250 if pardoned, +500 more for slaying the Goblin King).
 
 
 ## Game Over Conditions
 
 | Condition | Trigger |
 ---------------------------------------------------------------------------------------
+| **Vindicated** *(best win)* | Slay the Goblin King on day 28, then pay the final tribute |
 | **Pardoned** *(win)* | Pay the day-28 tribute |
 | **Hanged** | Miss a second tribute, or miss the final one |
 | **Mutiny** | Average loyalty below 20, or two members below 10 |
@@ -121,9 +158,9 @@ When the run ends, win or lose, the books open: outcome, score, tribute paid, wa
 
 ## Script Architecture
 
-Contains an 8 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul, employment records, and runtime-built UI.
+Contains a 9 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul, employment records, and runtime-built UI.
 
-### `PTManager` — partial class, 8 files
+### `PTManager` — partial class, 9 files
 
 The central game controller. Owns all shared state (gold, party list, enemy list, day counter, UI references, balance constants) and is split into partial files for readability:
 
@@ -131,7 +168,8 @@ The central game controller. Owns all shared state (gold, party list, enemy list
 ---------------------------------------------------------------------------------------
 | `PTManager.cs` | Variables, constants, `GameState` (Town / Combat / GameOver / Victory), `Awake`/`Start`, input setup, shared helpers (`ChangeGold`, `UpdateUI`, `TriggerGameOver`, `SetSunIntensity`) |
 | `PTManager.Party.cs` | Party formation (`GetNextPartyMemberTransform`), `SpawnRandomPartyMember`, `RemovePartyMember` (with a status and fate), `LevelUpTo`, `GetAveragePartyLevel` |
-| `PTManager.Combat.cs` | `TryEncounter` + `GetEncounterSize`, `TryAttack`, `TryRunAway`, turn phases |
+| `PTManager.Combat.cs` | The auto-combat coroutine (`RunCombat`), stances and targeting, interventions (`TryHazardPay`, `TryPotion`, `TryBribe`, `TryFocusFire`, `TryRetreat`), speed, enemy/boss spawning |
+| `PTManager.Jobs.cs` | The job pool, `RefreshJobBoard`, `TryTakeJob`, `TryRestDay`, `CompleteJob`, the Goblin King |
 | `PTManager.Town.cs` | `TrySleep` (the night sequence) + `RestParty`, `TryHeal`, `TryBless`, `TryResurrect`, `RestartRun`, `CanPerformTownAction` |
 | `PTManager.Ledger.cs` | Employment, `RunPayroll`, loyalty events, `RunNightlyTheft`, `TryAudit` + `ResolveConfrontation`, `TryFire`, `ResolveDesertions`, `CheckMutiny`, run totals |
 | `PTManager.Tribute.cs` | Tribute schedule, `CollectTribute` (strikes, seizure, execution), `TriggerVictory`, `RunScore` |
@@ -141,10 +179,13 @@ The central game controller. Owns all shared state (gold, party list, enemy list
 Each input callback (`OnSleep`, `OnHeal`, ...) is a one-line wrapper around its `Try...` method, so keyboard and buttons share the same logic.
 
 ### `PTActionBar`
-Builds its own overlay canvas at runtime (no scene setup needed; turn it off with `buildActionBar` on PTManager). Views: **Main** (town actions), **Tavern** (hiring board), **Ledger** (payroll toggles, audits, firing). A caught thief forces the confrontation choice. `PTManager.UpdateUI()` calls `Refresh()`, which re-reads every label, cost and availability. Opens the Final Ledger when the run ends.
+Builds its own overlay canvas at runtime (no scene setup needed; turn it off with `buildActionBar` on PTManager). Views: **Main** (town actions, stance), **Job board**, **Tavern** (hiring board), **Ledger** (payroll toggles, audits, firing), and **Combat** (interventions, speed). A caught thief forces the confrontation choice. `PTManager.UpdateUI()` calls `Refresh()`, which re-reads every label, cost and availability. Opens the Final Ledger when the run ends.
 
 ### `PTFinalLedgerPanel` / `PTUIFactory`
 The end-of-run books (outcome, score, totals, per-hire table, biggest thief). `PTUIFactory` holds the shared runtime UI helpers (canvas, panel, row, label, button) so all generated UI looks the same.
+
+### `PTJob` (Data Class)
+A contract: name, description, risk, first day, weight, enemy count (× party size), escalation, enemy level bonus, ambush chance, pay (+ per week), loyalty bonus, and boss settings. `PTJob.DefaultPool()` and `PTJob.GoblinKing()` hold the tuned defaults; edit them in the PTManager Inspector.
 
 ### `PTEmployeeRecord` (Data Class)
 A party member's employment file: loyalty, hidden greed, payroll toggle, nights unpaid, theft (total and unrecovered), kills, loot, wages received, deaths, and status/fate. Held on `PTSoul.employment` (runtime only) and in `PTManager.runLedger`, so the books keep everyone ever hired. It travels with `DeadCharacterData`, so a resurrected hero keeps their history.
@@ -256,28 +297,21 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 
 ---
 
-### **PTManager.Combat.cs** — Battle System
+### **PTManager.Combat.cs / Jobs.cs** — Jobs & Auto-Combat
 
-**Enemy Spawning:**
-- `TryEncounter()` — **(E key)** Spawns a group of enemies sized by `GetEncounterSize()`, switches to the Combat state, starts turn-based combat
+**Jobs:**
+- `RefreshJobBoard()` — Draws 3 weighted contracts available today (+ the Goblin King on day 28)
+- `TryTakeJob(index)` — **(E opens the board)** One job per day: quiet escorts pay out at once, otherwise spawns the enemies (or the boss and guard) and starts combat
+- `TryRestDay()` — Skip work, recover 40% HP
+- `GetEncounterSize(job)` — Party size × the job's range, + weekly escalation for jobs that escalate
 
-**Turn Queue System:**
-- `StartCombat()` — Clears old combat data, announces battle start, begins first round
-- `ResetCombatState()` — Clears all turn queues and tracking when battle ends
-- `StartRound()` — Sorts everyone by Sense stat, compares averages to determine who goes first
-- `AdvancePartyTurn()` — Goes through party one by one, waits for player to press Attack for each
-- `RunEnemyPhase()` — All enemies attack automatically in order of highest Sense, no player input
+**Combat flow:**
+- `StartCombat()` → `RunCombat()` coroutine — Rounds play automatically: a pause for interventions, initiative by average Sense, everyone acts in Sense order, with a delay per action scaled by speed
+- `CheckCombatOver()` — Victory pays the job (`CompleteJob`), losing everyone ends the run
+- `PickTarget()` — Focus target, else by stance (weakest / random / biggest hitter)
+- `ProcessPartyAttack` / `ProcessEnemyAttack` — Damage with stance and hazard-pay multipliers; kills award loot, XP and loyalty
 
-**Attack Processing:**
-- `ProcessPartyAttack(PTSoul attacker)` — Your character attacks random enemy, rolls damage, awards gold/XP if kill
-- `ProcessEnemyAttack(PTSoul enemyAttacker)` — Enemy attacks random party member, gives enemies XP if they kill someone
-
-**Victory/Defeat:**
-- `OnAllEnemiesDefeated()` — Awards commission gold, enables sleeping, returns to town
-- `TryAttack()` — **(Left Click)** Executes active party member's attack when it's their turn (clicks on UI buttons are ignored)
-
-**Escape System:**
-- `TryRunAway()` — **(R key)** Costs 10% gold, each member rolls escape chance based on agility vs enemy agility, escapees become cowards
+**Interventions:** `TryHazardPay()` **(1)**, `TryPotion()` **(Q)**, `TryBribe()` **(3)**, `TryFocusFire()` **(F)**, `TryRetreat()` **(R)**, `CycleCombatSpeed()` **(Space)**. Town keys are reused in battle.
 
 ---
 
@@ -355,17 +389,16 @@ Defines stat-modifying prefixes like "Mighty" (+3 Might), "Feeble" (-2 Might), e
 
 **Daily Loop:**
 ```
-Morning ledger (anything missing?) → Audit a suspect? → Hire at the Tavern / Heal / Bless →
-Hunt (E) → Fight → Loot + commission → Set payroll in the Ledger →
+Morning ledger (anything missing?) → Audit a suspect? → Hire at the Tavern / Heal / Bless → Set stance →
+Pick a job (E) → Watch the fight, spend gold on interventions → Get paid → Set payroll in the Ledger →
 Sleep (Space): tribute (every 7th day) → payroll → desertions/mutiny → rest → theft → Repeat until day 28
 ```
 
-**Combat Turn Order:**
-1. Compare average Sense: higher side goes first
-2. Each phase: characters act in order of highest → lowest Sense
-3. Party phase: player manually clicks Attack for each member
-4. Enemy phase: all enemies attack automatically
-5. New round starts, repeat until victory/defeat
+**Combat Round (automatic):**
+1. Round pause: your window to buy interventions
+2. Compare average Sense: higher side goes first (party wins ties)
+3. Each side acts in order of highest → lowest Sense; party members pick targets by focus order or stance
+4. Repeat until one side is gone (or you retreat)
 
 **Stat Derivation Formulas:**
 - **Max HP** = (60 + (Constitution × 10) + 15 per level gained) × stat multiplier
@@ -376,11 +409,11 @@ Sleep (Space): tribute (every 7th day) → payroll → desertions/mutiny → res
 - **Crit Multiplier** = 1.5 + (Luck × 0.02) + (Might × 0.02) + (Sense × 0.02)
 - **Damage Reduction** = Defense / (Defense + 50) — diminishing returns formula
 
-**Enemy Spawn Scaling (`GetEncounterSize`):**
-- **Grace days (1-3):** exactly one enemy per party member
-- **Base Formula:** partyCount to ceil(partyCount × 1.25), inclusive
-- **Weekly Escalation:** from day 8, +1 to the maximum each week (day 8-14: +1, day 15-21: +2, ...)
-- **Example:** 4-member party on day 4 = 4-5 enemies; day 10 = 4-6 enemies; day 22 = 4-8 enemies
+**Enemy Spawn Scaling (`GetEncounterSize(job)`):**
+- **Base Formula:** ceil(partyCount × job min) to ceil(partyCount × job max), inclusive (see the Job Board table)
+- **Weekly Escalation** (jobs that escalate): from day 8, +1 to the maximum each week (day 8-14: +1, day 15-21: +2, ...)
+- **Example:** goblin nest with a 4-member party: day 4 = 4-5 enemies; day 10 = 4-6; day 22 = 4-8
+- **Enemy level:** party average level + the job's level bonus (enemies never roll above it)
 
 ---------------------------------------------------------------------------------------
 
@@ -397,12 +430,12 @@ Sleep (Space): tribute (every 7th day) → payroll → desertions/mutiny → res
 | `FLEE_COST_PERCENT` | 0.1 | 10% of gold dropped to attempt fleeing |
 | `RESURRECTION_UNLOCK_DAY` | 7 | Day when resurrection becomes available |
 | `REST_HEAL_PERCENT` | 0.25 | Share of max HP recovered overnight by paid members |
-| `ENCOUNTER_GRACE_DAYS` | 3 | Days with one enemy per party member |
-| `ENCOUNTER_MAX_MULTIPLIER` | 1.25 | Max enemies = party size × this (rounded up), before escalation |
 | `ESCALATION_START_DAY` / `ESCALATION_EVERY_DAYS` | 8 / 7 | +1 max enemy each week from day 8 |
-| `commission` *(inspector)* / `COMMISSION_PER_WEEK` | 45 / 25 | Victory commission, growing each week |
+| `REST_DAY_HEAL_PERCENT` *(Jobs)* | 0.4 | HP restored by a rest day |
 
-**PTManager.Tribute.cs:** `RUN_LENGTH_DAYS` 28, `TRIBUTE_SCHEDULE` 200/350/500/700, `STRIKES_TO_EXECUTION` 2, score: +250 pardon, ±25 per survivor/death.
+**PTManager.Tribute.cs:** `RUN_LENGTH_DAYS` 28, `TRIBUTE_SCHEDULE` 250/450/650/900, `STRIKES_TO_EXECUTION` 2, score: +250 pardon, +500 vindicated, ±25 per survivor/death.
+
+**PTManager.Combat.cs:** stances (Aggressive ×1.15 dealt / ×1.25 taken, Cautious ×0.85 / ×0.8), potion 15g / +40 HP, hazard pay 5g per member / +25% / +2 loyalty, bribe 15g + 2× loot, retreat 10% of gold (cowardice below 50 loyalty), `actionDelay` 0.35 s and `roundPause` 0.6 s *(inspector)*, 2× speed = 40% of the delays. Jobs: see the Job Board table.
 
 **PTManager.Tavern.cs:** `TAVERN_CANDIDATES` 3, `SIGNING_FEE_DAYS` 2, `COWARD_FEE_MULTIPLIER` 1.5.
 
@@ -454,6 +487,24 @@ These values were tuned with the balance model in `Tools/BalanceSim`. Keep it in
 ---------------------------------------------------------------------------------------
 
 ## ⚖️ Recent Balance Changes
+
+### v0.7 - Phase 2: Jobs & Auto-Combat
+Combat plays itself. You pick a job and a stance, then spend gold on interventions. The single "encounter" became a daily job board, and day 28 offers the optional Goblin King.
+
+Balance model (2,000 runs per scripted player):
+
+| Player | Won (vindicated) | Economic loss | Slain |
+|---|---|---|---|
+| *Accountant*: risk-aware jobs, Aggressive, potions, retreats when losing, takes the King when strong | 30% (21%) | 61% | 9% *(all by the King)* |
+| *Naive*: best-paying job, never intervenes | 21% (0%) | 12% | 67% |
+| *Hoarder*: two heroes, safest jobs, Cautious | 0% | 100% | 0% |
+
+- Fights take about 17–22 s at 1× (90th percentile 27–34 s; ~1–2% go over 45 s), with 1–1.4 decisions each (target: ≤ 45 s, ≤ 6 decisions)
+- Retreat made ordinary fights nearly riskless for careful players, so the **Goblin King allows no retreat**: taking him on is a real gamble (a full, healthy party wins ~70%)
+- Re-tuned: job pay (≈0.6× the old commission for a standard nest), tribute 250/450/650/900, boss 14× HP / 3× attack
+- Removed: per-member fleeing, the click-to-attack turn system, grace days (early boards only offer small jobs), the flat victory commission
+- The adventure log catches up when messages pile up, so it keeps pace with auto-combat
+- Hazard pay and bribes aren't modelled in the sim (they're optional gold-for-safety trades)
 
 ### v0.6 - Phase 1: The Ledger
 Added the Queen's tribute and 28-day win, per-member payroll and loyalty, greed-driven theft with morning ledger counts and audits, firing, desertion and mutiny, the tavern hiring board, and the Final Ledger.

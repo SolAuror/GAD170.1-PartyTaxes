@@ -19,9 +19,11 @@ public partial class PTManager
         return true;
     }
 
-    public void OnSleep(InputAction.CallbackContext context)                                             //Method to handle Spacebar press, using new InputActions system
+    public void OnSleep(InputAction.CallbackContext context)                                             //Spacebar: sleep in town, change combat speed in battle
     {
-        if (context.performed) TrySleep();
+        if (!context.performed) return;
+        if (State == GameState.Combat) CycleCombatSpeed();
+        else TrySleep();
     }
 
     public void TrySleep()                                                                               //End the day: the Queen's tribute, payroll, desertions, mutiny, rest and theft, then a new morning
@@ -69,8 +71,8 @@ public partial class PTManager
         hasHealed = false;                                                                               //reset hasHealed for the new day
         hasBeenBlessed = false;                                                                          //reset hasBeenBlessed for the new day
         hasAudited = false;                                                                              //one audit per day
-        UnhideAllFledMembers();                                                                          //unhide any party members who fled during combat
         RefreshTavern();                                                                                 //new faces at the tavern
+        RefreshJobBoard();                                                                               //new contracts on the job board
 
         dailyMsg = "Heil, " + partyName +                                                                //greet the party,
                   "! You have " + gold +                                                                 //display the party gold
@@ -101,9 +103,11 @@ public partial class PTManager
         }
     }
 
-    public void OnHeal(InputAction.CallbackContext context)                                              //method to handle Q key press aka Healing
+    public void OnHeal(InputAction.CallbackContext context)                                              //Q: the cleric in town, a potion in battle
     {
-        if (context.performed) TryHeal();
+        if (!context.performed) return;
+        if (State == GameState.Combat) TryPotion();
+        else TryHeal();
     }
 
     public void TryHeal()
@@ -142,9 +146,14 @@ public partial class PTManager
         PTAdventureLog.Log("The Party has been Healed! Healing received: " + totalHealed + " HP. Cost: " + healCost + " gold. Remaining gold: " + gold);
     }
 
-    public void OnRecruit(InputAction.CallbackContext context)                                           //Method to handle F key: open the tavern's hiring board
+    public void OnRecruit(InputAction.CallbackContext context)                                           //F: the tavern's hiring board in town, focus fire in battle
     {
         if (!context.performed) return;
+        if (State == GameState.Combat)
+        {
+            TryFocusFire();
+            return;
+        }
         if (actionBar != null)
         {
             actionBar.ToggleTavern();                                                                    //pick who to hire with the mouse
@@ -173,9 +182,11 @@ public partial class PTManager
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);                                //reload the current scene, resetting all state
     }
 
-    public void OnBless(InputAction.CallbackContext context)                                             //for blessing the Party
+    public void OnBless(InputAction.CallbackContext context)                                             //1: bless in town, hazard pay in battle
     {
-        if (context.performed) TryBless();
+        if (!context.performed) return;
+        if (State == GameState.Combat) TryHazardPay();
+        else TryBless();
     }
 
     public void TryBless()
@@ -211,9 +222,11 @@ public partial class PTManager
             PTAdventureLog.Log("The Party has been Blessed! Cost: " + blessCost + " gold. Remaining gold: " + gold);
     }
 
-    public void OnResurrect(InputAction.CallbackContext context)                                         //resurrect a fallen party member
+    public void OnResurrect(InputAction.CallbackContext context)                                         //3: resurrect in town, bribe in battle
     {
-        if (context.performed) TryResurrect();
+        if (!context.performed) return;
+        if (State == GameState.Combat) TryBribe();
+        else TryResurrect();
     }
 
     public void TryResurrect()
