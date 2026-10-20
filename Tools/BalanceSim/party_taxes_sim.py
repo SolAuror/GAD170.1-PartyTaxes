@@ -1,7 +1,7 @@
 """Monte Carlo model of Party Taxes v0.4 rules as implemented (not as documented).
-# Monte Carlo model of Party Taxes v0.4 combat + economy. Usage: python3 Tools/BalanceSim/party_taxes_sim.py
-# Mirrors constants in PTManager.cs, Prefab_Management.prefab overrides and SoulType_*.asset ranges; update both together.
-Mirrors PTManager/PTSoul/PTSoulGen + SoulType assets + Prefab_Management overrides."""
+Mirrors PTManager/PTSoul/PTSoulGen constants, Prefab_Management.prefab overrides and
+SoulType_*.asset ranges -- update this file when those change.
+Usage: python3 Tools/BalanceSim/party_taxes_sim.py"""
 import random, statistics, sys
 from collections import Counter
 
