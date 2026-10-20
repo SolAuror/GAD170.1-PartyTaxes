@@ -44,6 +44,7 @@ public partial class PTManager
     public bool FocusOrderedThisRound { get; private set; }
     private PTSoul focusTarget;                                                                          //ordered target, attacked by everyone until it falls
     private Coroutine combatRoutine;                                                                     //the running battle
+    private int fightLoot = 0;                                                                           //gold looted this fight (loot-share members take a cut of it)
 
     public void ChangeXP(int xpAmount, string source = null)
     {
@@ -85,6 +86,11 @@ public partial class PTManager
         }
         int min = Mathf.Max(1, Mathf.CeilToInt(partyCount * job.enemiesMin));
         int max = Mathf.Max(1, Mathf.CeilToInt(partyCount * job.enemiesMax)) + escalation;
+        if (job.kind == JobKind.Fight)
+        {
+            min += ExtraEnemies;                                                                         //Audit Level 5: one more goblin in every job
+            max += ExtraEnemies;
+        }
         return Random.Range(min, max + 1);                                                               //int Random.Range excludes the max, so +1 to make it inclusive
     }
 
@@ -206,6 +212,11 @@ public partial class PTManager
         State = GameState.Combat;                                                                        //town actions and sleeping are blocked until the battle ends
         CombatRound = 0;
         focusTarget = null;
+        fightLoot = 0;
+        foreach (PTSoul member in partyMembers)
+        {
+            if (member.employment != null) member.employment.killsThisFight = 0;
+        }
         PTAdventureLog.Log("=== COMBAT BEGINS ===  (" + stance + " stance)");
         UpdateUI();
         combatRoutine = StartCoroutine(RunCombat());
@@ -351,7 +362,7 @@ public partial class PTManager
         if (adversaries.Count == 0) return true;
 
         PTSoul target = PickTarget();
-        int damage = Mathf.RoundToInt(attacker.DealDamage() * PartyDamageMultiplier);                       //stance and hazard pay change how hard the party hits
+        int damage = Mathf.RoundToInt(attacker.DealDamage() * PartyDamageMultiplier * TraitDamageMultiplier(attacker)); //stance, hazard pay and traits change how hard the party hits
         bool wasCrit = attacker.WasCrit;
         int actualDamage = target.TakeDamage(damage);
         string critTag = wasCrit ? " <color=yellow>CRITICAL HIT!</color>" : "";
@@ -364,15 +375,18 @@ public partial class PTManager
         if (!target.isAlive)
         {
             PTAdventureLog.Log("<enemy>" + target.Name + "</enemy>" + " has been slain by " + attacker.Name + "!");
+            int loot = TraitLoot(attacker, target.goldReward);                                           //Light-fingered members find more
             if (attacker.employment != null)                                                             //credit the kill in their employment file
             {
                 attacker.employment.kills++;
-                attacker.employment.goldLooted += target.goldReward;
+                attacker.employment.killsThisFight++;
+                attacker.employment.goldLooted += loot;
                 attacker.employment.ChangeLoyalty(LOYALTY_KILL);
             }
-            ChangeGold(target.goldReward);
+            fightLoot += loot;
+            ChangeGold(loot);
             ChangeXP(target.accumulatedLifeXp, "<enemy>" + target.Name + "</enemy>");
-            PTAdventureLog.Log("<enemy>" + target.Name + "</enemy>" + " has been slain! You found " + target.goldReward + " gold on the corpse.");
+            PTAdventureLog.Log("<enemy>" + target.Name + "</enemy>" + " has been slain! You found " + loot + " gold on the corpse.");
             if (focusTarget == target) focusTarget = null;
             Destroy(target.gameObject);
             adversaries.Remove(target);
@@ -463,7 +477,7 @@ public partial class PTManager
         if (patient == null || !CanIntervene(PotionUsedThisRound, POTION_COST, "a potion")) return;
         ChangeGold(-POTION_COST);
         PotionUsedThisRound = true;
-        int healed = patient.RestoreHP(POTION_HEAL);
+        int healed = patient.RestoreHP(Mathf.RoundToInt(POTION_HEAL * (1f + PotionBonus)));              //a Medic makes potions go further
         PTAdventureLog.Log("You lob a potion to " + patient.Name + ", restoring " + healed + " HP. (-" + POTION_COST + " gold)");
         UpdateUI();
     }
@@ -539,6 +553,14 @@ public partial class PTManager
         SetSunIntensity(0.1f);
         State = GameState.Town;
         PTAdventureLog.Log("You have defeated all the enemies! You can now sleep through the night.");
+        foreach (PTSoul member in partyMembers)                                                          //Bloodthirsty members sulk if they didn't get a kill
+        {
+            if (member.employment != null && member.employment.HasSpecial("bloodthirsty") && member.employment.killsThisFight == 0)
+            {
+                member.employment.ChangeLoyalty(BLOODTHIRSTY_NO_KILL_LOYALTY);
+                PTAdventureLog.Log(member.Name + " didn't get a kill and is in a foul mood.");
+            }
+        }
         if (job != null) CompleteJob(job);
         UpdateUI();
     }
@@ -546,6 +568,7 @@ public partial class PTManager
     private void EndCombatWithoutVictory(bool retreated)                                                 //the party withdrew (or the enemy scattered): no pay for the job
     {
         ResetCombatState();
+        NextJobPayPercent = 0;                                                                           //any event bonus on this job is lost
         for (int i = adversaries.Count - 1; i >= 0; i--)
         {
             Destroy(adversaries[i].gameObject);

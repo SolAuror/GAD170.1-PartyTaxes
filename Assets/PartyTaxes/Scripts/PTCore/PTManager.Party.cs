@@ -26,7 +26,7 @@ public partial class PTManager
         return baseSpawnPosition + new Vector3(startX + partyMembers.Count * spacing, 0, 0);               //new member takes the last slot
     }
 
-    void SpawnRandomPartyMember()                                                                          //Method to spawn a random party member using soulGen and the base prefab
+    void SpawnRandomPartyMember(List<string> forcedTraits = null, bool wagePremium = true)               //Method to spawn a random party member using soulGen and the base prefab
     {
         if (partyMembers.Count >= maxPartyCount)                                                            //check if the party is not full
         {
@@ -51,8 +51,9 @@ public partial class PTManager
             if (soul != null)
             {
                 int partyLevel = GetAveragePartyLevel();                                                 //average of the members already in the party
+                GiveTraits(soul, forcedTraits ?? RollTraits(), wagePremium);                             //a trait or two
                 partyMembers.Add(soul);                                                                  //add the new member to the party
-                LevelUpTo(soul, partyLevel, true);                                                       //level up new recruit to match party average
+                LevelUpTo(soul, partyLevel + TraitLevelBonus(soul), true);                               //level up new recruit to match party average
                 Employ(soul);                                                                            //put them on the payroll
                 PTAdventureLog.Log(soul.Name + " joined " + partyName + "!");                            //log message that a new member has joined
             }
@@ -91,7 +92,7 @@ public partial class PTManager
     {
         while (soul.level < targetLevel)
         {
-            soul.LevelUp();
+            soul.LevelUp(false);                                                                         //recruits are hired at their level's wage, no haggling
         }
         if (fullHeal)
         {

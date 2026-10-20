@@ -33,6 +33,16 @@ namespace PartyTaxes
             TextMeshProUGUI subtitle = PTUIFactory.CreateLabel("Subtitle", panel, 24f, TextAlignmentOptions.Center, 34f);
             subtitle.text = "Day " + manager.daysElapsed + " of " + manager.RunLengthDays + "  ·  Score " + manager.RunScore;
 
+            TextMeshProUGUI runInfo = PTUIFactory.CreateLabel("RunInfo", panel, 18f, TextAlignmentOptions.Center, 28f);
+            runInfo.text = PTRunRules.Name(manager.CurrentAccusation) + "  ·  Audit Level " + manager.AuditLevel + "  ·  " +
+                           (manager.IsDailyRun ? "Daily run " : "Seed ") + manager.RunSeed;
+
+            if (manager.RunUnlocks.Count > 0)
+            {
+                TextMeshProUGUI unlocks = PTUIFactory.CreateLabel("Unlocks", panel, 22f, TextAlignmentOptions.Center, 30f * manager.RunUnlocks.Count);
+                unlocks.text = "<color=#FFD700>" + string.Join("\n", manager.RunUnlocks) + "</color>";
+            }
+
             TextMeshProUGUI totals = PTUIFactory.CreateLabel("Totals", panel, 20f, TextAlignmentOptions.Left, 110f);
             totals.text = BuildTotals(manager);
 

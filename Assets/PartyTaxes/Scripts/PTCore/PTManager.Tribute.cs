@@ -30,7 +30,8 @@ public partial class PTManager
         get
         {
             int week = Mathf.Clamp(NextTributeDay / TRIBUTE_INTERVAL_DAYS - 1, 0, TRIBUTE_SCHEDULE.Length - 1);
-            return TRIBUTE_SCHEDULE[week];
+            float due = TRIBUTE_SCHEDULE[week] * TributeMultiplier * (1f - TributeDiscount);                     //Audit Level and accusation, minus the Nephew's discount
+            return Mathf.Max(0, Mathf.RoundToInt(due / 5f) * 5 + TributeAdjustment);                             //rounded to 5, plus anything events added or removed
         }
     }
 
@@ -45,6 +46,7 @@ public partial class PTManager
         {
             ChangeGold(-due);
             TotalTributePaid += due;
+            TributeAdjustment = 0;
             PTAdventureLog.Log("The Queen's auditor counts out " + due + " gold and leaves satisfied.");
             if (daysElapsed >= RUN_LENGTH_DAYS)
             {
@@ -62,6 +64,7 @@ public partial class PTManager
         }
 
         TributeStrikes++;
+        TributeAdjustment = 0;
         if (TributeStrikes >= STRIKES_TO_EXECUTION || daysElapsed >= RUN_LENGTH_DAYS)
         {
             TriggerGameOver("You came up short for the Queen" + (TributeStrikes >= STRIKES_TO_EXECUTION ? " a second time" : " on the final audit") +
@@ -71,7 +74,8 @@ public partial class PTManager
 
         int seized = gold;
         ChangeGold(-gold);
-        PTSoul collateral = partyMembers.OrderByDescending(m => m.dailywages).FirstOrDefault();
+        PTSoul collateral = partyMembers.Where(m => m.employment == null || !m.employment.TraitFlag(t => t.immuneToSeizure))   //nobody seizes the Queen's nephew
+                                        .OrderByDescending(m => m.dailywages).FirstOrDefault();
         PTAdventureLog.Log("You're " + (due - seized) + " gold short! The auditor seizes all " + seized + " gold" +
                            (collateral != null ? " and drags " + collateral.Name + " off in chains as collateral." : ".") +
                            " Fail the Queen again and you hang.");
@@ -87,6 +91,7 @@ public partial class PTManager
         PTAdventureLog.Log(message);
         RunOutcome = outcome;
         State = GameState.Victory;
+        RecordRunEnd(true);
         UpdateUI();
     }
 
@@ -96,8 +101,9 @@ public partial class PTManager
         {
             int deaths = runLedger.Sum(r => r.timesDied);
             int survivors = partyMembers.Count;
-            return TotalTributePaid + gold + survivors * SCORE_PER_SURVIVOR - deaths * SCORE_PER_DEATH +
-                   (State == GameState.Victory ? VICTORY_SCORE_BONUS : 0) + (SlewGoblinKing ? VINDICATED_SCORE_BONUS : 0);
+            int score = TotalTributePaid + gold + survivors * SCORE_PER_SURVIVOR - deaths * SCORE_PER_DEATH +
+                        (State == GameState.Victory ? VICTORY_SCORE_BONUS : 0) + (SlewGoblinKing ? VINDICATED_SCORE_BONUS : 0);
+            return Mathf.RoundToInt(score * PTRunRules.ScoreMultiplier(AuditLevel));                             //harder audits score more
         }
     }
 }

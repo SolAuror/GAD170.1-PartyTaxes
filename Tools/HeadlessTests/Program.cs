@@ -341,5 +341,167 @@ static class Program
         m = NewRun(10);
         m.CycleCombatSpeed(); var s1 = m.Speed; m.CycleCombatSpeed(); var s2 = m.Speed; m.CycleCombatSpeed();
         Check(s1 == PTManager.CombatSpeed.Fast && s2 == PTManager.CombatSpeed.Skip && m.Speed == PTManager.CombatSpeed.Normal, "combat speed cycles 1x, 2x, skip");
+
+        Phase3Tests();
+    }
+
+    // ── Phase 3: traits, contracts, raises, events, accusations, audit levels ──
+    static PTManager NewRunWithTraits(params string[][] traitSets)
+    {
+        var m = new PTManager { daysElapsed = 1, gold = 0 };
+        foreach (var traits in traitSets)
+        {
+            var soul = MakeSoul(3, 2, 3, 3, 2, false, SoulAttribute.Might, 10);
+            soul.Name = "Hero" + m.partyMembers.Count;
+            m.partyMembers.Add(soul);
+            Call(m, "GiveTraits", soul, new List<string>(traits), true);
+            Call(m, "Employ", soul, 60);
+        }
+        return m;
+    }
+
+    static void SetEvent(PTManager m, string id, PTSoul subject)
+    {
+        SetPrivate(m, "PendingEvent", PTContent.Events.First(e => e.id == id));
+        SetPrivate(m, "EventSubject", subject);
+    }
+
+    static void Phase3Tests()
+    {
+        Console.WriteLine("\n-- Phase 3 --");
+        Check(PTContent.Traits.Count == 20 && PTContent.Events.Count >= 30, $"content loads from JSON ({PTContent.Traits.Count} traits, {PTContent.Events.Count} events)");
+        Check(PTContent.Trait("nephew").cannotBeFired && PTContent.Trait("coward").wagePercent == -30, "trait fields deserialize");
+
+        // Rolling respects exclusions
+        var roller = new PTManager();
+        bool clash = false; int doubles = 0;
+        for (int i = 0; i < 2000; i++)
+        {
+            var t = (List<string>)Call(roller, "RollTraits");
+            if (t.Count == 2) { doubles++; var a = PTContent.Trait(t[0]); var b = PTContent.Trait(t[1]); clash |= a.id == b.id || a.Excludes(b.id) || b.Excludes(a.id); }
+        }
+        Check(!clash && doubles > 550 && doubles < 850, $"traits: 1 or 2 per recruit, never conflicting ({doubles}/2000 with two)");
+
+        // Applying traits
+        var m = NewRunWithTraits(new[] { "tough" }, new[] { "coward" }, new[] { "veteran" });
+        var tough = m.partyMembers[0]; var coward = m.partyMembers[1]; var vet = m.partyMembers[2];
+        Check(tough.atrConstitution == 5 && tough.dailywages == 11, $"Tough: +2 Con, +10% wage (Con {tough.atrConstitution}, wage {tough.dailywages})");
+        Check(coward.isCowardly && coward.dailywages == 7, "Coward: arrives Cowardly, 30% cheaper");
+        Check((int)typeof(PTManager).GetMethod("TraitLevelBonus", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { vet }) == 2, "Veteran arrives 2 levels up");
+
+        // Payroll hooks
+        m = NewRunWithTraits(new[] { "mercenary" }, new[] { "loyal" }, new[] { "union_rep" }, new[] { "lucky" });
+        m.gold = 1000;
+        Call(m, "RunPayroll");
+        Check(m.partyMembers[0].employment.loyalty == 60 && m.partyMembers[1].employment.loyalty == 65, "Mercenary gains nothing from pay; others +5");
+        m.gold = 0;
+        foreach (var p in m.partyMembers) p.employment.loyalty = 60;
+        Call(m, "RunPayroll");
+        Check(m.partyMembers[1].employment.loyalty == 47, $"Loyal loses half when unpaid: -8, plus -5 from the unpaid Union Rep (got {m.partyMembers[1].employment.loyalty})");
+        Check(m.partyMembers[3].employment.loyalty == 40 && m.partyMembers[2].employment.loyalty == 45, "Union Rep unpaid: everyone else loses 5 more");
+
+        // Contracts: fees, wages, loot share
+        m = NewRun(10); m.gold = 1000;
+        var cand = MakeSoul(2, 2, 2, 2, 2, false, SoulAttribute.Might, 12);
+        Check(m.SigningFee(cand, ContractType.DayWage) == 24 && m.SigningFee(cand, ContractType.LootShare) == 12 && m.SigningFee(cand, ContractType.SigningBonus) == 60,
+              "signing fees: wage 2 days, share 1 day, bonus 5 days");
+        Check(m.ContractWage(cand, ContractType.SigningBonus) == 7 && m.ContractWage(cand, ContractType.LootShare) == 0, "signing bonus pays 60% wage; loot share no wage");
+        SetPrivate(m, "AuditLevel", 4);
+        Check(m.SigningFee(cand, ContractType.DayWage) == 36, "Audit Level 4: signing fees +50%");
+        var sharer = m.partyMembers[0]; sharer.employment.contract = ContractType.LootShare; sharer.RecalculateWage();
+        Check(sharer.dailywages == 0, "loot-share members draw no wage");
+        m.gold = 0; m.daysElapsed = 1;
+        Call(m, "CompleteJob", PTJob.DefaultPool()[1]);
+        Check(m.gold == 30 - 5 && sharer.employment.tookCutToday && sharer.employment.wagesReceived == 5, $"loot share takes 16% of the job (gold {m.gold})");
+        Call(m, "RunPayroll");
+        Check(sharer.employment.loyalty == 65, "a sharer who got a cut is happy at payroll");
+        sharer.employment.tookCutToday = false; Call(m, "RunPayroll");
+        Check(sharer.employment.loyalty == 60, "a sharer with no cut today loses 5");
+
+        // Raise negotiation
+        m = NewRun(20); var asker = m.partyMembers[0];
+        asker.GainXP(100);
+        Check(asker.level == 2 && asker.dailywages == 20 && asker.employment.requestedWage == 23 && m.PendingRaise == asker && m.HasPendingDecision,
+              "a level-up asks for a raise instead of taking it");
+        m.ResolveRaise(PTManager.RaiseChoice.Accept);
+        Check(asker.dailywages == 23 && asker.employment.loyalty == 65 && m.PendingRaise == null, "accepting pays the raise, +5 loyalty");
+        asker.GainXP(1000); int before = asker.dailywages, wanted = asker.employment.requestedWage;
+        m.ResolveRaise(PTManager.RaiseChoice.Refuse);
+        Check(asker.dailywages == before && asker.employment.loyalty == 50, "refusing keeps the wage, -15 loyalty");
+        asker.GainXP(2000); before = asker.dailywages; wanted = asker.employment.requestedWage; int loyaltyBefore = asker.employment.loyalty;
+        m.ResolveRaise(PTManager.RaiseChoice.Counter);
+        Check((asker.dailywages == (before + wanted) / 2 && asker.employment.loyalty == loyaltyBefore) ||
+              (asker.dailywages == wanted && asker.employment.loyalty == loyaltyBefore - 10), "countering: half the raise, or the full raise and -10 loyalty");
+        var recruit = MakeSoul(2, 2, 2, 2, 2, false, SoulAttribute.Might, 20);
+        Call(m, "LevelUpTo", recruit, 3, true);
+        Check(recruit.dailywages == 26 && (recruit.employment == null || recruit.employment.requestedWage == 0), "recruits levelled on hire don't haggle");
+
+        // Night events
+        m = NewRun(10, 10); m.gold = 100; m.daysElapsed = 3;
+        var subject = m.partyMembers[0];
+        SetEvent(m, "tavern_brawl", subject);
+        Check(m.HasPendingDecision && m.CanChooseEventOption(0), "an event waits for a decision");
+        m.ResolveEvent(0);
+        Check(m.gold == 75 && m.PendingEvent == null, "paying for the brawl costs 25 gold");
+        SetEvent(m, "tavern_brawl", subject); m.ResolveEvent(1);
+        Check(subject.employment.loyalty == 45, "docking the subject's pay costs them 15 loyalty");
+        m.gold = 10; SetEvent(m, "tavern_brawl", subject);
+        Check(!m.CanChooseEventOption(0), "a choice you can't afford is disabled");
+        m.gold = 100; SetEvent(m, "rival_accountant", subject); m.ResolveEvent(0);
+        Check(m.TributeAdjustment == -60 && m.gold == 60, "events can change the next tribute");
+        SetEvent(m, "goblin_prisoner", subject); m.ResolveEvent(1);
+        Check(m.NextJobPayPercent == 25 && m.JobPay(PTJob.DefaultPool()[1]) == 38, "interrogating the prisoner: next job pays 25% more");
+        SetEvent(m, "poacher", subject); m.gold = 0; m.ResolveEvent(2);
+        Check(!m.partyMembers.Contains(subject) && subject.employment.status == EmploymentStatus.Quit && m.gold == 20, "a poached member leaves (status Quit)");
+        bool traitGateRespected = true;
+        for (int i = 0; i < 300; i++)
+        {
+            var fresh = NewRun(10, 10); fresh.daysElapsed = 10;
+            Call(fresh, "DrawNightEvent");
+            if (fresh.PendingEvent != null && !string.IsNullOrEmpty(fresh.PendingEvent.requiresTrait)) traitGateRespected = false;
+        }
+        Check(traitGateRespected, "trait-gated events never appear without that trait in the party");
+
+        // Trait combat and economy hooks
+        m = NewRunWithTraits(new[] { "haggler" }, new[] { "nephew" });
+        Check(m.HealCost == 15, $"Haggler: cleric 25% cheaper (heal {m.HealCost})");
+        m.daysElapsed = 7;
+        Check(m.NextTributeAmount == 225, $"Nephew: tribute 10% lower (got {m.NextTributeAmount})");
+        Check(!m.CanBeFired(m.partyMembers[1]), "the Queen's nephew can't be fired");
+        m.gold = 0; Call(m, "CollectTribute");
+        Check(m.partyMembers.Contains(m.partyMembers.Last()) && m.partyMembers.Count == 1 && m.partyMembers[0].employment.HasTrait("nephew"),
+              "the nephew can't be seized as collateral");
+        m = NewRunWithTraits(new[] { "brawler" });
+        m.partyMembers[0].employment.hungover = true;
+        Check(Math.Abs((float)Call(m, "TraitDamageMultiplier", m.partyMembers[0]) - 0.7f) < 0.001f, "a hungover Drunkard fights at 70%");
+
+        // Accusations and Audit Levels
+        m = NewRun(10); m.daysElapsed = 7;
+        SetPrivate(m, "CurrentAccusation", Accusation.Embezzler);
+        Check(m.NextTributeAmount == 300, $"Embezzler: tribute +20% (got {m.NextTributeAmount})");
+        SetPrivate(m, "CurrentAccusation", Accusation.Clerk); SetPrivate(m, "AuditLevel", 5);
+        Check(m.NextTributeAmount == 290 && m.ExtraEnemies == 1 && Math.Abs(m.TheftMultiplier - 1.3f) < 0.001f, $"Audit Level 5 stacks the rules (tribute {m.NextTributeAmount})");
+        var size = typeof(PTManager).GetMethod("GetEncounterSize", BindingFlags.Instance | BindingFlags.NonPublic);
+        m.partyMembers.Add(MakeSoul(2, 2, 2, 2, 2, false, SoulAttribute.Might)); m.daysElapsed = 3;
+        int lo = 99; for (int i = 0; i < 300; i++) lo = Math.Min(lo, (int)size.Invoke(m, new object[] { PTJob.DefaultPool()[1] }));
+        Check(lo == 3, $"Audit Level 5: one more enemy per job (min {lo} for a party of 2)");
+        SetPrivate(m, "AuditLevel", 3); m.gold = 0; m.daysElapsed = 28;
+        int baseScore = 0 + 0 + m.partyMembers.Count * 25;
+        Check(m.RunScore == (int)Math.Round(baseScore * 1.5f), $"Audit Level 3 scores x1.5 (got {m.RunScore})");
+
+        var start = new PTManager { gold = 45 };
+        start.BeginRun(Accusation.Embezzler, 2, 1234, true);
+        Check(start.State == PTManager.GameState.Town && start.gold == 145 && start.daysElapsed == 1 && start.AuditLevel == 2 && start.RunSeed == 1234 && start.IsDailyRun,
+              "BeginRun applies the accusation, level and seed");
+
+        // Unlocks between runs
+        UnityEngine.PlayerPrefs.DeleteAll();
+        Check(PTRunRules.MaxAuditLevel == 1 && !PTRunRules.IsUnlocked(Accusation.Embezzler) && PTRunRules.IsUnlocked(Accusation.Clerk), "fresh profile: only the Clerk and Level 1");
+        var unlocked = PTRunRules.RecordRun(true, 1, 28, 3, 900);
+        Check(PTRunRules.MaxAuditLevel == 2 && PTRunRules.IsUnlocked(Accusation.Embezzler) && PTRunRules.IsUnlocked(Accusation.Scapegoat) && PTRunRules.IsUnlocked(Accusation.Bookkeeper),
+              $"a win at Level 1 unlocks Level 2 and the accusations it earned ({string.Join("; ", unlocked)})");
+        PTRunRules.RecordRun(true, 1, 28, 0, 100);
+        Check(PTRunRules.MaxAuditLevel == 2 && PTRunRules.BestScore == 900, "winning an easier level doesn't skip ahead; best score kept");
+        UnityEngine.PlayerPrefs.DeleteAll();
     }
 }

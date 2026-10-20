@@ -228,7 +228,7 @@ Do these alongside Phase 0. They're small now and expensive later.
 | **0 · Stabilise** ✅ | Fix the §3.6 bugs. Level-ups grant stats. Overnight regen. `GameState` + `SoulData` split. Clickable UI. Update the README. | 1 wk | 📊 Median run > 12 days. Day-1 wipe < 3%. |
 | **1 · The Ledger (vertical slice)** ✅ | Hiring board, fire, individual payroll, Loyalty/Greed theft + Audit, Queen's tribute + 28-day win, Final Ledger screen. | 2–3 wks | Playtesters can explain *why* they lost. 📊 Endings: ≥ 50% economic (tribute/mutiny), ≤ 35% wipe. |
 | **2 · Combat rework** ✅ | Auto-combat + speed control, gold interventions, stances, job board (6–8 jobs). | 2 wks | Fight ≤ 45 s. ≤ 6 decisions per fight. |
-| **3 · Variety** | 15–20 traits, 30+ night events, wage negotiation, 3 Accusations, Audit levels 1–5. | 2 wks | Two runs on different seeds feel different by day 3. |
+| **3 · Variety** ✅ | 15–20 traits, 30+ night events, wage negotiation, 3 Accusations, Audit levels 1–5. | 2 wks | Two runs on different seeds feel different by day 3. |
 | **4 · Ship** | WebGL, title/settings/tutorial, audio pass, itch page, a closed playtest of 10+ people, then launch. | 1–2 wks | Average session ≥ 25 min. ≥ 30% of testers start a second run. |
 
 ### Phase 0 status (v0.5)
@@ -279,6 +279,23 @@ Open question for playtests: scripted players almost never trigger mutiny (3%), 
 | Verification | `Tools/HeadlessTests`: 76 checks; the stubbed `StartCoroutine` now runs battles to completion, so whole auto-fights are tested headless. **Not yet run in the Unity editor** |
 
 Watch in playtests: whether the 0.6 s round pause is long enough to react at 1× (it's a serialized field), and whether the King feels fair. He wins ~30% of the fights players choose to take.
+
+### Phase 3 status (v0.8)
+
+| Item | Status |
+|---|---|
+| Traits | ✅ 20, data-driven (`Resources/PartyTaxes/Traits.json`): additive modifiers plus 5 coded specials (Union Rep, Gambler, Drunkard, Bloodthirsty, Glory Hound). 1 per recruit, 35% get a second |
+| Night events | ✅ 34 events with 1–3 choices, gambles, and day/trait/party-size gates (`Events.json`); 70% of nights; decided in the morning |
+| Wage negotiation | ✅ Level-ups ask for a raise: accept / refuse / counter (Sense-based) |
+| Contract types (from Phase 1) | ✅ Day wage, loot share (16% of each job), signing bonus (5-day fee, 60% wage) |
+| Accusations | ✅ Clerk, Embezzler, Scapegoat, Bookkeeper, unlocked by milestones |
+| Audit Levels 1–5 | ✅ Stacking rules, score multiplier, unlocked by winning the previous level (`PlayerPrefs`) |
+| Daily seed run | ✅ Date-based seed; the seed is shown in the Final Ledger |
+| Content format | JSON in `Resources/` instead of ScriptableObjects, so the balance sim reads exactly the same content as the game |
+| Exit criteria | ✅ 📊 Two runs share only 41% of what they show by day 3 (~11 traits, ~2 events, different jobs). Outcome bands held: accountant 33% won / 56% economic / 11% slain |
+| Verification | `Tools/HeadlessTests`: 118 checks; stubbed `Resources`/`JsonUtility` load the real JSON. **Not yet run in the Unity editor** |
+
+Not done from §5.8: unlocking new races and traits through achievements (all 20 traits are in the pool from the start), and Audit Levels 6–10.
 
 **If time is short:** Phase 0 plus the Queen's tribute, Loyalty/Greed theft, the hiring board, and night events (as plain text, no new art) are enough for a strong jam-scale itch release. The theme is carried by systems, not content.
 

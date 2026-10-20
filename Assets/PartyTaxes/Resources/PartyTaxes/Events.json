@@ -1,0 +1,245 @@
+{
+  "events": [
+    { "id": "tavern_brawl", "title": "Tavern Brawl", "minDay": 2, "weight": 1.0,
+      "text": "{name} started a brawl at the tavern last night. The owner wants damages.",
+      "choices": [
+        { "label": "Pay for the damages", "success": { "gold": -25, "resultText": "You count out 25 gold. The owner grunts." } },
+        { "label": "Dock it from {name}'s pay", "success": { "subjectLoyalty": -15, "resultText": "{name} pays up, glaring at you all morning." } },
+        { "label": "Deny everything", "chance": 0.5,
+          "success": { "resultText": "The owner can't prove a thing." },
+          "failure": { "gold": -50, "partyLoyalty": -5, "resultText": "The watch has witnesses. 50 gold and a lot of embarrassment." } } ] },
+
+    { "id": "sick_mother", "title": "A Sick Mother", "minDay": 3, "weight": 1.0,
+      "text": "{name} asks for a 30 gold advance. Their mother is sick, they say.",
+      "choices": [
+        { "label": "Give the advance", "success": { "gold": -30, "subjectLoyalty": 20, "resultText": "{name} will remember this." } },
+        { "label": "Refuse", "success": { "subjectLoyalty": -10, "resultText": "{name} says nothing, which is worse." } },
+        { "label": "Ask for proof", "chance": 0.5,
+          "success": { "gold": -30, "subjectLoyalty": 10, "resultText": "There's a letter and everything. You pay, a little ashamed." },
+          "failure": { "subjectGreed": 0.1, "subjectLoyalty": -5, "resultText": "There is no mother. There is, however, a dice game." } } ] },
+
+    { "id": "cleric_sale", "title": "Closing-Down Sale", "minDay": 2, "weight": 0.9,
+      "text": "The cleric is closing shop and selling off potions cheap.",
+      "choices": [
+        { "label": "Stock up (heal 30%)", "success": { "gold": -30, "partyHealPercent": 30, "resultText": "The party drinks deep." } },
+        { "label": "No thanks", "success": { "resultText": "You keep your gold." } } ] },
+
+    { "id": "goblin_envoy", "title": "A Goblin Envoy", "minDay": 4, "weight": 0.9,
+      "text": "A nervous goblin envoy offers 40 gold if your party takes the day off tomorrow.",
+      "choices": [
+        { "label": "Take the bribe", "success": { "gold": 40, "tributeChange": 25, "resultText": "Easy money, until the Queen's spies hear of it: next tribute +25." } },
+        { "label": "Refuse", "success": { "partyLoyalty": 5, "resultText": "The party likes a boss with principles." } },
+        { "label": "Ambush the envoy", "chance": 0.6,
+          "success": { "gold": 25, "subjectXp": 30, "resultText": "{name} drags back the envoy's purse." },
+          "failure": { "partyHealPercent": -20, "resultText": "The envoy brought friends." } } ] },
+
+    { "id": "forged_receipts", "title": "Creative Accounting", "minDay": 5, "weight": 0.8,
+      "text": "A forger offers receipts that would make 60 gold of expenses vanish from the books.",
+      "choices": [
+        { "label": "Use them", "chance": 0.5,
+          "success": { "gold": 60, "resultText": "Flawless work. You almost miss your old job." },
+          "failure": { "gold": 60, "tributeChange": 100, "resultText": "The auditor squints at the receipts. Next tribute +100." } },
+        { "label": "Report the forger", "success": { "gold": 20, "resultText": "The watch pays a small reward." } },
+        { "label": "Ignore him", "success": { "resultText": "You've been in enough trouble." } } ] },
+
+    { "id": "rival_accountant", "title": "Mortimer Quill", "minDay": 6, "weight": 0.7,
+      "text": "Mortimer Quill, the accountant who framed you, arrives in town and offers his 'help'.",
+      "choices": [
+        { "label": "Pay him to talk to the auditor", "success": { "gold": -40, "tributeChange": -60, "resultText": "Quill knows the auditor well. Next tribute -60." } },
+        { "label": "Throw him out", "success": { "partyLoyalty": 5, "resultText": "The party cheers as he lands in the mud." } },
+        { "label": "Blackmail him", "chance": 0.5,
+          "success": { "gold": 80, "resultText": "Quill pays to keep his own secrets." },
+          "failure": { "tributeChange": 80, "resultText": "Quill writes to the Queen first. Next tribute +80." } } ] },
+
+    { "id": "stray_dog", "title": "A Stray Dog", "minDay": 1, "weight": 0.8,
+      "text": "A scruffy dog has followed the party home.",
+      "choices": [
+        { "label": "Adopt it", "success": { "gold": -10, "partyLoyalty": 5, "resultText": "The party is smitten. The dog eats like a hoblin." } },
+        { "label": "Shoo it away", "success": { "resultText": "It looks back once. Just once." } } ] },
+
+    { "id": "dice_game", "title": "Dice in the Dark", "minDay": 2, "weight": 0.8,
+      "text": "{name} wants to stake 30 of the party's gold on a 'sure thing' dice game.",
+      "choices": [
+        { "label": "Let them", "chance": 0.5,
+          "success": { "gold": 30, "subjectLoyalty": 5, "resultText": "Double or nothing, and it's double!" },
+          "failure": { "gold": -30, "subjectLoyalty": 5, "resultText": "It was not a sure thing." } },
+        { "label": "Absolutely not", "success": { "subjectLoyalty": -5, "resultText": "{name} sulks." } } ] },
+
+    { "id": "hangover", "title": "Last Night's Tab", "minDay": 2, "weight": 1.2, "requiresTrait": "drunkard",
+      "text": "{name} drank the tavern dry and left the tab in your name.",
+      "choices": [
+        { "label": "Pay the tab", "success": { "gold": -15, "subjectLoyalty": 5, "resultText": "{name} raises a shaky thumbs-up." } },
+        { "label": "Let them suffer", "success": { "subjectHealPercent": -20, "resultText": "{name} spends the morning groaning." } } ] },
+
+    { "id": "wandering_healer", "title": "A Wandering Healer", "minDay": 1, "weight": 0.9,
+      "text": "A wandering healer offers to see to the party for 20 gold.",
+      "choices": [
+        { "label": "Pay her", "success": { "gold": -20, "partyHealPercent": 40, "resultText": "Her poultices smell awful and work wonders." } },
+        { "label": "Decline", "success": { "resultText": "She moves on to the next town." } } ] },
+
+    { "id": "bandit_toll", "title": "Bandit Toll", "minDay": 4, "weight": 0.9,
+      "text": "Bandits block the road back to town and demand a toll.",
+      "choices": [
+        { "label": "Pay 10% of your gold", "success": { "goldPercent": -10, "resultText": "They count it twice and wave you through." } },
+        { "label": "Fight through", "chance": 0.7,
+          "success": { "gold": 20, "partyLoyalty": 3, "resultText": "The bandits flee, dropping their own purse." },
+          "failure": { "partyHealPercent": -25, "resultText": "You get through, but it hurts." } } ] },
+
+    { "id": "lost_ledger", "title": "A Lost Ledger", "minDay": 2, "weight": 0.8,
+      "text": "You find a merchant's lost ledger, full of interesting numbers.",
+      "choices": [
+        { "label": "Return it", "success": { "gold": 15, "resultText": "The merchant pays a small reward." } },
+        { "label": "Sell what's in it", "success": { "gold": 35, "tributeChange": 15, "resultText": "Profitable, and noticed: next tribute +15." } } ] },
+
+    { "id": "union_meeting", "title": "A Union Meeting", "minDay": 3, "weight": 1.3, "requiresTrait": "union_rep", "minParty": 2,
+      "text": "{name} has called a union meeting. The party wants better conditions.",
+      "choices": [
+        { "label": "Pay everyone a bonus", "success": { "gold": -30, "partyLoyalty": 10, "resultText": "Solidarity is expensive." } },
+        { "label": "Refuse their demands", "success": { "partyLoyalty": -10, "resultText": "The meeting ends in muttering." } },
+        { "label": "Break it up", "success": { "subjectLoyalty": -20, "partyLoyalty": -3, "resultText": "{name} will not forget this." } } ] },
+
+    { "id": "nephew_letter", "title": "A Letter from Court", "minDay": 3, "weight": 1.5, "requiresTrait": "nephew",
+      "text": "The Queen has written to her nephew, {name}, asking how you treat him.",
+      "choices": [
+        { "label": "Buy him gifts before he replies", "success": { "gold": -20, "subjectLoyalty": 10, "tributeChange": -60, "resultText": "He writes glowingly. Next tribute -60." } },
+        { "label": "Let him write what he likes", "chance": 0.5,
+          "success": { "tributeChange": -30, "resultText": "He's fond of you, apparently. Next tribute -30." },
+          "failure": { "tributeChange": 40, "resultText": "He complains about the food. Next tribute +40." } } ] },
+
+    { "id": "lucky_charm", "title": "A Lucky Charm", "minDay": 1, "weight": 0.7,
+      "text": "A merchant swears this rabbit's foot will keep the party safe. 25 gold.",
+      "choices": [
+        { "label": "Buy it", "success": { "gold": -25, "partyLoyalty": 5, "resultText": "Nobody believes in it. Everyone touches it before a fight." } },
+        { "label": "Haggle", "chance": 0.5,
+          "success": { "gold": -10, "partyLoyalty": 5, "resultText": "Ten gold. You've still got it." },
+          "failure": { "resultText": "The merchant is insulted and leaves." } },
+        { "label": "Pass", "success": { "resultText": "You keep your gold and your skepticism." } } ] },
+
+    { "id": "ghost_story", "title": "Restless Dead", "minDay": 7, "weight": 0.8,
+      "text": "{name} swears they saw a ghost last night and won't stop shaking.",
+      "choices": [
+        { "label": "Pay for a vigil", "success": { "gold": -15, "subjectLoyalty": 5, "resultText": "The priest chants. {name} sleeps." } },
+        { "label": "Tell them to toughen up", "chance": 0.5,
+          "success": { "subjectXp": 40, "resultText": "{name} faces their fear, and comes back stronger." },
+          "failure": { "subjectCowardly": 1, "resultText": "{name} hasn't been the same since. Branded Cowardly." } } ] },
+
+    { "id": "training_master", "title": "An Old Knight", "minDay": 3, "weight": 0.8,
+      "text": "A retired knight offers to train {name} for 35 gold.",
+      "choices": [
+        { "label": "Pay for training", "success": { "gold": -35, "subjectXp": 80, "resultText": "{name} learns a thing or two." } },
+        { "label": "Decline", "success": { "resultText": "The knight shrugs and returns to his ale." } } ] },
+
+    { "id": "town_tax", "title": "The Town Tax", "minDay": 5, "weight": 0.8,
+      "text": "The town's own tax collector wants 5% of your gold. Taxes, of all things.",
+      "choices": [
+        { "label": "Pay", "success": { "goldPercent": -5, "resultText": "The irony is not lost on you." } },
+        { "label": "Argue the numbers", "chance": 0.5,
+          "success": { "resultText": "You find three errors in his maths. He leaves empty-handed." },
+          "failure": { "goldPercent": -10, "partyLoyalty": -3, "resultText": "He finds four in yours. Double, plus a fine." } } ] },
+
+    { "id": "fence", "title": "Found Goods", "minDay": 3, "weight": 0.8,
+      "text": "{name} offers to fence some goods they 'found'. There's 40 gold in it for you.",
+      "choices": [
+        { "label": "Take the cut", "success": { "gold": 40, "subjectGreed": 0.15, "resultText": "Now you're partners in crime. {name} gets ideas." } },
+        { "label": "Refuse", "success": { "subjectLoyalty": -5, "subjectGreed": -0.1, "resultText": "{name} returns the goods, grumbling." } } ] },
+
+    { "id": "feast_day", "title": "Feast Day", "minDay": 7, "weight": 0.8,
+      "text": "It's a feast day in town. The party looks at you hopefully.",
+      "choices": [
+        { "label": "Throw them a feast", "success": { "gold": -40, "partyLoyalty": 12, "resultText": "A night they'll talk about for weeks." } },
+        { "label": "They can celebrate on their own wages", "success": { "partyLoyalty": -3, "resultText": "Fair, but cold." } } ] },
+
+    { "id": "injured_villager", "title": "A Mauled Villager", "minDay": 2, "weight": 0.8,
+      "text": "The party finds a villager mauled by goblins on the road.",
+      "choices": [
+        { "label": "Carry them to the cleric", "success": { "gold": -10, "partyLoyalty": 5, "tributeChange": -20, "resultText": "Word of your kindness reaches court. Next tribute -20." } },
+        { "label": "Walk on", "success": { "partyLoyalty": -5, "resultText": "Nobody speaks the rest of the way." } } ] },
+
+    { "id": "armorer", "title": "The Armorer's Offer", "minDay": 4, "weight": 0.8,
+      "text": "An armorer offers {name} a fitted shield for 40 gold.",
+      "choices": [
+        { "label": "Buy it", "success": { "gold": -40, "subjectConstitution": 1, "resultText": "{name} is noticeably harder to kill. +1 Constitution." } },
+        { "label": "Pass", "success": { "resultText": "Maybe next week." } } ] },
+
+    { "id": "weaponsmith", "title": "A Better Blade", "minDay": 4, "weight": 0.8,
+      "text": "The weaponsmith has a blade that would suit {name}. 35 gold.",
+      "choices": [
+        { "label": "Buy it", "success": { "gold": -35, "subjectMight": 1, "resultText": "{name} swings it with delight. +1 Might." } },
+        { "label": "Pass", "success": { "resultText": "{name} looks at it longingly on the way out." } } ] },
+
+    { "id": "desertion_rumor", "title": "Rumours of Desertion", "minDay": 5, "weight": 0.8, "minParty": 2,
+      "text": "Word is {name} has been asking about work with another company.",
+      "choices": [
+        { "label": "Raise their pay 20%", "success": { "subjectWagePercent": 20, "subjectLoyalty": 15, "resultText": "{name} stays, and costs more." } },
+        { "label": "Have a quiet word", "chance": 0.5,
+          "success": { "subjectLoyalty": 5, "resultText": "Just a misunderstanding." },
+          "failure": { "subjectLoyalty": -20, "resultText": "It was not a misunderstanding." } },
+        { "label": "Ignore it", "success": { "resultText": "Rumours are just rumours. Probably." } } ] },
+
+    { "id": "goblin_prisoner", "title": "A Goblin Prisoner", "minDay": 6, "weight": 0.8,
+      "text": "The party has caught a goblin scout. It's surprisingly chatty.",
+      "choices": [
+        { "label": "Ransom it to its tribe", "success": { "gold": 30, "partyLoyalty": -3, "resultText": "Its tribe pays. The party thinks it's a bit grim." } },
+        { "label": "Interrogate it", "success": { "nextJobPayPercent": 25, "resultText": "It tells you where the goblins keep their gold. Tomorrow's job pays 25% more." } },
+        { "label": "Let it go", "success": { "partyLoyalty": 2, "resultText": "It waves. Weird." } } ] },
+
+    { "id": "quiet_night", "title": "A Quiet Night", "minDay": 1, "weight": 0.7,
+      "text": "A rare quiet night. {name} teaches the others a song about the Queen. It is not flattering.",
+      "choices": [
+        { "label": "Join in", "success": { "partyLoyalty": 3, "resultText": "You know all the words. Suspicious." } } ] },
+
+    { "id": "rats", "title": "Rats in the Stores", "minDay": 2, "weight": 0.8,
+      "text": "Rats got into the party's food stores overnight.",
+      "choices": [
+        { "label": "Replace the supplies", "success": { "gold": -15, "resultText": "Fresh bread, and a cat." } },
+        { "label": "Make do", "success": { "partyHealPercent": -15, "resultText": "Nobody eats well today." } } ] },
+
+    { "id": "card_cheat", "title": "Caught Cheating", "minDay": 2, "weight": 1.3, "requiresTrait": "light_fingered",
+      "text": "{name} was caught cheating at cards. The other players want 30 gold back.",
+      "choices": [
+        { "label": "Pay them off", "success": { "gold": -30, "resultText": "Settled, quietly." } },
+        { "label": "Let {name} spend a night in jail", "success": { "subjectLoyalty": -20, "subjectHealPercent": -20, "resultText": "{name} returns bruised and resentful." } },
+        { "label": "Split the winnings", "success": { "gold": 20, "subjectGreed": 0.1, "partyLoyalty": -5, "resultText": "Partners in crime again." } } ] },
+
+    { "id": "poacher", "title": "A Rival Recruiter", "minDay": 8, "weight": 0.7, "minParty": 2,
+      "text": "A rival company is trying to poach {name}.",
+      "choices": [
+        { "label": "Counter-offer: +25% wage", "success": { "subjectWagePercent": 25, "subjectLoyalty": 10, "resultText": "{name} stays, for a price." } },
+        { "label": "Let them decide", "chance": 0.5,
+          "success": { "subjectLoyalty": 5, "resultText": "{name} stays. They liked being asked." },
+          "failure": { "subjectLeaves": true, "resultText": "{name} takes the other offer." } },
+        { "label": "Wish them well", "success": { "subjectLeaves": true, "gold": 20, "resultText": "{name} leaves. The rival pays you a finder's fee." } } ] },
+
+    { "id": "heralds_inspection", "title": "The Herald's Inspection", "minDay": 10, "weight": 0.8,
+      "text": "The Queen's herald arrives early to inspect your books.",
+      "choices": [
+        { "label": "Grease his palm", "success": { "gold": -30, "tributeChange": -50, "resultText": "He likes what he sees. Next tribute -50." } },
+        { "label": "Show the books honestly", "chance": 0.6,
+          "success": { "tributeChange": -25, "resultText": "Immaculate. Next tribute -25." },
+          "failure": { "tributeChange": 50, "resultText": "He finds the coffee stains. Next tribute +50." } } ] },
+
+    { "id": "lucky_find", "title": "A Purse in the Road", "minDay": 1, "weight": 0.8,
+      "text": "{name} finds a fat purse lying in the road.",
+      "choices": [
+        { "label": "Keep it", "success": { "gold": 25, "resultText": "Finders keepers." } },
+        { "label": "Return it", "success": { "gold": 10, "partyLoyalty": 4, "resultText": "The owner gives a reward, and the party feels good about it." } } ] },
+
+    { "id": "pay_dispute", "title": "A Pay Dispute", "minDay": 3, "weight": 0.8, "minParty": 2,
+      "text": "{name} says the others earn more for less work.",
+      "choices": [
+        { "label": "Give {name} a 15% raise", "success": { "subjectWagePercent": 15, "subjectLoyalty": 10, "resultText": "{name} is mollified." } },
+        { "label": "Everyone is paid what they're worth", "success": { "subjectLoyalty": -10, "resultText": "{name} disagrees, loudly." } } ] },
+
+    { "id": "medic_supplies", "title": "Field Supplies", "minDay": 2, "weight": 1.3, "requiresTrait": "medic",
+      "text": "{name} wants 20 gold for bandages and herbs.",
+      "choices": [
+        { "label": "Fund it", "success": { "gold": -20, "partyHealPercent": 25, "resultText": "{name} patches everyone up." } },
+        { "label": "Make do", "success": { "subjectLoyalty": -5, "resultText": "{name} sighs and tears up a shirt." } } ] },
+
+    { "id": "goblin_festival", "title": "The Goblin Festival", "minDay": 14, "weight": 0.7,
+      "text": "The goblins are holding some kind of festival. Their nests are empty.",
+      "choices": [
+        { "label": "Loot the empty nests", "success": { "gold": 45, "partyLoyalty": -2, "resultText": "Easy pickings, if a little petty." } },
+        { "label": "Leave them be", "success": { "partyLoyalty": 3, "resultText": "Even goblins deserve a day off, the party decides." } } ] }
+  ]
+}

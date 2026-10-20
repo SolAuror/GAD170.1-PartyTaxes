@@ -185,10 +185,20 @@ public class PTSoul : MonoBehaviour                                             
         return Mathf.RoundToInt((level + 1) * 50 * Mathf.Sqrt(level));
     }
 
-    public void RecalculateWage()                                                                        //daily wage for the current level
+    public int WageForLevel()                                                                            //what this soul's wage is for their current level
     {
         if (baseWage <= 0) baseWage = dailywages;
-        dailywages = Mathf.RoundToInt(baseWage * (1f + WAGE_RAISE_PER_LEVEL * (level - 1)));
+        return WageFor(baseWage);
+    }
+
+    public int WageFor(int someBaseWage)                                                                 //the wage a given base wage comes to at this soul's level
+    {
+        return Mathf.RoundToInt(someBaseWage * (1f + WAGE_RAISE_PER_LEVEL * (level - 1)));
+    }
+
+    public void RecalculateWage()                                                                        //daily wage for the current level (loot-share contracts draw no wage)
+    {
+        dailywages = (employment != null && employment.OnLootShare) ? 0 : WageForLevel();
     }
 
     public void GainXP(int xpAmount)                                                                     //method to gain XP
@@ -201,7 +211,7 @@ public class PTSoul : MonoBehaviour                                             
         UpdateUI();                                                  // Update UI after gaining XP
     }
 
-    public void LevelUp()                                                                                //method to handle leveling up
+    public void LevelUp(bool negotiate = true)                                                           //method to handle leveling up; employed party members ask for their raise instead of taking it
     {
         level++;
         accumulatedLifeXp += currentXp;                                                                  // Increase accumulated life XP by the currently held XP before it resets to 0.
@@ -211,10 +221,19 @@ public class PTSoul : MonoBehaviour                                             
         levelBonusHP += HP_PER_LEVEL;                                                                    // +10 max HP per level
         RecalculateStats();                                                                              // Recalculate stats from attributes on level up
         currentHP = Mathf.Min(maxHP, currentHP + Mathf.RoundToInt(maxHP * LEVEL_UP_HEAL_PERCENT));       // Restore 30% of max HP on level up, capped at max
-        RecalculateWage();                                                                               // Raise daily wages by 15% of the base wage per level
+        bool asksForRaise = negotiate && employment != null && employment.IsEmployed && !employment.OnLootShare;
+        if (asksForRaise)
+        {
+            employment.requestedWage = WageForLevel();                                                   // they'll ask for it in town: accept, refuse or counter
+        }
+        else
+        {
+            RecalculateWage();                                                                           // Raise daily wages by 15% of the base wage per level
+        }
         if(!isAdversary)
         {
-            PTAdventureLog.Log(Name + " reached level " + level + "! +1 " + levelUpAttribute + " and +" + HP_PER_LEVEL + " max health. Their Daily wages are now " + dailywages + " gold."); // Log level up event
+            PTAdventureLog.Log(Name + " reached level " + level + "! +1 " + levelUpAttribute + " and +" + HP_PER_LEVEL + " max health." +
+                               (asksForRaise ? " They'd like a raise to " + employment.requestedWage + " gold a day." : "")); // Log level up event
         }
     }
 

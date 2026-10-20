@@ -24,6 +24,7 @@ namespace PartyTaxes
         private View view = View.Main;
         private PTSoul fireConfirm;                                                        // first click on Fire asks for confirmation
         private PTFinalLedgerPanel finalLedger;
+        private PTRunSetupPanel runSetup;
         private readonly List<Action> refreshers = new List<Action>();
 
         /// Builds the action bar on its own overlay canvas and returns it.
@@ -70,13 +71,19 @@ namespace PartyTaxes
             {
                 finalLedger = PTFinalLedgerPanel.Show(manager);                            // the run just ended: open the books
             }
+            if (manager.State == PTManager.GameState.Setup && runSetup == null)
+            {
+                runSetup = PTRunSetupPanel.Show(manager);                                  // before the run: choose accusation, Audit Level and seed
+            }
         }
 
         // ── State helpers ──────────────────────────────────────────────
         private bool InTown()     => manager.State == PTManager.GameState.Town;
         private bool InCombat()   => manager.State == PTManager.GameState.Combat;
         private bool Confronting() => InTown() && manager.PendingConfrontation != null;
-        private bool ShowView(View v) => InTown() && !Confronting() && view == v;
+        private bool Raising()     => InTown() && manager.PendingConfrontation == null && manager.PendingRaise != null;
+        private bool Eventing()    => InTown() && manager.PendingConfrontation == null && manager.PendingRaise == null && manager.PendingEvent != null;
+        private bool ShowView(View v) => InTown() && !manager.HasPendingDecision && view == v;
         private PTSoul MemberAt(int slot) => slot < manager.partyMembers.Count ? manager.partyMembers[slot] : null;
         private PTSoul CandidateAt(int slot) => slot < manager.TavernCandidates.Count ? manager.TavernCandidates[slot] : null;
 
@@ -91,6 +98,7 @@ namespace PartyTaxes
             {
                 switch (manager.State)
                 {
+                    case PTManager.GameState.Setup:    header.text = "Party Taxes"; break;
                     case PTManager.GameState.Town:     header.text = "Day " + manager.daysElapsed + " of " + manager.RunLengthDays + " - Town"; break;
                     case PTManager.GameState.Combat:   header.text = "Battle! Round " + manager.CombatRound; break;
                     case PTManager.GameState.GameOver: header.text = "Game Over"; break;
@@ -99,7 +107,7 @@ namespace PartyTaxes
             });
 
             TextMeshProUGUI status = PTUIFactory.CreateLabel("Status", panel, 18f, TextAlignmentOptions.Center, 44f);
-            Bind(status.gameObject, () => !manager.IsRunOver, () =>
+            Bind(status.gameObject, () => !manager.IsRunOver && manager.State != PTManager.GameState.Setup, () =>
                 status.text = InCombat()
                     ? (manager.ActiveJob != null ? manager.ActiveJob.jobName + " (" + manager.JobPay(manager.ActiveJob) + "g)" : "Ambush!") +
                       "\n" + manager.stance + " stance  ·  Gold " + manager.gold
@@ -107,6 +115,8 @@ namespace PartyTaxes
                       Mathf.RoundToInt(manager.AverageLoyalty));
 
             BuildConfrontation(panel);
+            BuildRaisePrompt(panel);
+            BuildEventPrompt(panel);
             BuildMainView(panel);
             BuildJobsView(panel);
             BuildTavernView(panel);
@@ -132,6 +142,41 @@ namespace PartyTaxes
                 () => manager.ResolveConfrontation(PTManager.Confrontation.Forgive));
             AddButton(panel, Confronting, () => true, () => "Fire them  (no severance)",
                 () => manager.ResolveConfrontation(PTManager.Confrontation.Fire));
+        }
+
+        private void BuildRaisePrompt(RectTransform panel)
+        {
+            TextMeshProUGUI ask = PTUIFactory.CreateLabel("Raise", panel, 20f, TextAlignmentOptions.Center, 52f);
+            Bind(ask.gameObject, Raising, () =>
+            {
+                PTSoul member = manager.PendingRaise;
+                ask.text = "<b>" + member.Name + "</b> reached level " + member.level + " and wants a raise:\n" +
+                           member.dailywages + "g to " + member.employment.requestedWage + "g a day.";
+            });
+            AddButton(panel, Raising, () => true, () => "Accept  (+5 loyalty)", () => manager.ResolveRaise(PTManager.RaiseChoice.Accept));
+            AddButton(panel, Raising, () => true,
+                () => "Counter-offer half  (" + Mathf.RoundToInt(manager.CounterChance(manager.PendingRaise) * 100) + "% chance, else -10 loyalty)",
+                () => manager.ResolveRaise(PTManager.RaiseChoice.Counter));
+            AddButton(panel, Raising, () => true, () => "Refuse  (-15 loyalty)", () => manager.ResolveRaise(PTManager.RaiseChoice.Refuse));
+        }
+
+        private void BuildEventPrompt(RectTransform panel)
+        {
+            TextMeshProUGUI story = PTUIFactory.CreateLabel("Event", panel, 20f, TextAlignmentOptions.Center, 78f);
+            Bind(story.gameObject, Eventing, () =>
+                story.text = "<b>" + manager.PendingEvent.title + "</b>\n" + manager.EventText(manager.PendingEvent.text));
+            for (int i = 0; i < 3; i++)
+            {
+                int index = i;
+                Func<bool> visible = () => Eventing() && index < manager.PendingEvent.choices.Length;
+                AddButton(panel, visible, () => manager.CanChooseEventOption(index), () =>
+                {
+                    PTEventChoice choice = manager.PendingEvent.choices[index];
+                    string cost = choice.GoldCost > 0 ? "  -" + choice.GoldCost + "g" : "";
+                    string odds = choice.Chance < 1f ? "  (" + Mathf.RoundToInt(choice.Chance * 100) + "% chance)" : "";
+                    return manager.EventText(choice.label) + cost + odds;
+                }, () => manager.ResolveEvent(index));
+            }
         }
 
         private void BuildMainView(RectTransform panel)
@@ -222,21 +267,37 @@ namespace PartyTaxes
             {
                 int slot = i;
                 Func<bool> visible = () => tavern() && CandidateAt(slot) != null;
-                TextMeshProUGUI info = PTUIFactory.CreateLabel("Candidate", panel, 18f, TextAlignmentOptions.Left, 46f);
+                TextMeshProUGUI info = PTUIFactory.CreateLabel("Candidate", panel, 18f, TextAlignmentOptions.Left, 66f);
                 Bind(info.gameObject, visible, () =>
                 {
                     PTSoul c = CandidateAt(slot);
-                    info.text = "<b>" + c.Name + "</b>  L" + c.level + "\nHP " + c.maxHP + "  ATK " + c.attack + "  DEF " + c.defense +
-                                "  ·  " + c.dailywages + "g/day  ·  " + (c.employment != null ? c.employment.GreedHint : "");
+                    PTEmployeeRecord job = c.employment;
+                    info.text = "<b>" + c.Name + "</b>  L" + c.level + "  ·  " + c.dailywages + "g/day\nHP " + c.maxHP + "  ATK " + c.attack + "  DEF " + c.defense +
+                                "  ·  " + (job != null ? job.GreedHint : "") +
+                                (job != null && job.traits.Count > 0 ? "\n<color=#E0C070>" + job.TraitNames + "</color>" : "");
                 });
-                AddButton(panel, visible,
-                    () => !manager.PartyFull && manager.gold >= manager.SigningFee(CandidateAt(slot)),
-                    () => manager.PartyFull ? "Party is full" : "Hire  (signing fee " + manager.SigningFee(CandidateAt(slot)) + "g)",
-                    () => manager.TryHire(slot), SmallButtonHeight);
+                RectTransform row = PTUIFactory.CreateRow(panel, SmallButtonHeight);
+                Bind(row.gameObject, visible, () => { });
+                AddContractButton(row, visible, slot, ContractType.DayWage, c => "Wage  " + manager.SigningFee(c, ContractType.DayWage) + "g");
+                AddContractButton(row, visible, slot, ContractType.LootShare,
+                    c => "Share " + Mathf.RoundToInt(manager.LootSharePercent * 100) + "%  " + manager.SigningFee(c, ContractType.LootShare) + "g");
+                AddContractButton(row, visible, slot, ContractType.SigningBonus,
+                    c => "Bonus  " + manager.SigningFee(c, ContractType.SigningBonus) + "g, " + manager.ContractWage(c, ContractType.SigningBonus) + "g/day");
             }
+            TextMeshProUGUI hint = PTUIFactory.CreateLabel("ContractHint", panel, 15f, TextAlignmentOptions.Center, 34f);
+            Bind(hint.gameObject, () => tavern() && manager.TavernCandidates.Count > 0, () =>
+                hint.text = "<color=#B0A080>Wage: pay daily. Share: no wage, a cut of every job. Bonus: big fee now, 60% wage for good.</color>");
             TextMeshProUGUI empty = PTUIFactory.CreateLabel("Empty", panel, 18f, TextAlignmentOptions.Center, 30f);
             Bind(empty.gameObject, () => tavern() && manager.TavernCandidates.Count == 0, () => empty.text = "No one else is looking for work today.");
             AddButton(panel, tavern, () => true, () => "Back", () => SetView(View.Main));
+        }
+
+        private void AddContractButton(RectTransform row, Func<bool> visible, int slot, ContractType contract, Func<PTSoul, string> label)
+        {
+            AddButton(row, visible,
+                () => !manager.PartyFull && CandidateAt(slot) != null && manager.gold >= manager.SigningFee(CandidateAt(slot), contract),
+                () => CandidateAt(slot) == null ? "" : manager.PartyFull ? "Full" : label(CandidateAt(slot)),
+                () => manager.TryHire(slot, contract), SmallButtonHeight);
         }
 
         private void BuildLedgerView(RectTransform panel)
@@ -251,26 +312,30 @@ namespace PartyTaxes
             {
                 int slot = i;
                 Func<bool> visible = () => ledger() && MemberAt(slot) != null;
-                TextMeshProUGUI info = PTUIFactory.CreateLabel("Member", panel, 18f, TextAlignmentOptions.Left, 44f);
+                TextMeshProUGUI info = PTUIFactory.CreateLabel("Member", panel, 18f, TextAlignmentOptions.Left, 62f);
                 Bind(info.gameObject, visible, () =>
                 {
                     PTSoul m = MemberAt(slot);
                     PTEmployeeRecord job = m.employment;
-                    info.text = "<b>" + m.Name + "</b>  L" + m.level + "  ·  " + m.dailywages + "g/day\n" +
+                    string pay = job != null && job.OnLootShare ? Mathf.RoundToInt(manager.LootSharePercent * 100) + "% share" : m.dailywages + "g/day";
+                    info.text = "<b>" + m.Name + "</b>  L" + m.level + "  ·  " + pay + "\n" +
                                 (job != null ? job.Mood + " (" + job.loyalty + ")  ·  " + job.GreedHint +
-                                               (job.nightsUnpaid > 0 ? "  ·  <color=#FF8080>unpaid " + job.nightsUnpaid + " night(s)</color>" : "") : "");
+                                               (job.nightsUnpaid > 0 ? "  ·  <color=#FF8080>unpaid " + job.nightsUnpaid + " night(s)</color>" : "") +
+                                               (job.traits.Count > 0 ? "\n<color=#E0C070>" + job.TraitNames + "</color>" : "") : "");
                 });
 
                 RectTransform row = PTUIFactory.CreateRow(panel, SmallButtonHeight);
                 Bind(row.gameObject, visible, () => { });
                 AddButton(row, visible, () => true,
-                    () => MemberAt(slot) != null && MemberAt(slot).employment != null && !MemberAt(slot).employment.payTonight ? "Pay: <color=#FF8080>NO</color>" : "Pay: yes",
+                    () => MemberAt(slot) != null && MemberAt(slot).employment != null && MemberAt(slot).employment.OnLootShare ? "On share" :
+                          MemberAt(slot) != null && MemberAt(slot).employment != null && !MemberAt(slot).employment.payTonight ? "Pay: <color=#FF8080>NO</color>" : "Pay: yes",
                     () => manager.TogglePay(MemberAt(slot)), SmallButtonHeight);
                 AddButton(row, visible, () => !manager.hasAudited,
                     () => manager.hasAudited ? "Audited today" : "Audit",
                     () => { fireConfirm = null; manager.TryAudit(MemberAt(slot)); }, SmallButtonHeight);
-                AddButton(row, visible, () => true,
-                    () => fireConfirm != null && fireConfirm == MemberAt(slot) ? "<color=#FF8080>Sure?</color>" : "Fire  -" + manager.SeveranceFor(MemberAt(slot)) + "g",
+                AddButton(row, visible, () => manager.CanBeFired(MemberAt(slot)),
+                    () => !manager.CanBeFired(MemberAt(slot)) ? "Can't fire" :
+                          fireConfirm != null && fireConfirm == MemberAt(slot) ? "<color=#FF8080>Sure?</color>" : "Fire  -" + manager.SeveranceFor(MemberAt(slot)) + "g",
                     () => OnFireClicked(MemberAt(slot)), SmallButtonHeight);
             }
             AddButton(panel, ledger, () => true, () => "Back", () => SetView(View.Main));

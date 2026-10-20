@@ -1,4 +1,4 @@
-# Party Taxes v0.7
+# Party Taxes v0.8
 
 > *A game about paying your empl— ...friends, to adventure with you on a quest to slay pests for the queen.*
 
@@ -55,6 +55,18 @@ Every action has a clickable button in the **action bar** on the right of the sc
 
 ## Gameplay Systems
 
+### Starting a Run: Accusations, Audit Levels & Seeds
+Each run starts on the setup screen. Pick **what you were accused of** (your starting archetype), an **Audit Level** (difficulty), and a random or **daily** seed. A daily run uses today's date, so everyone gets the same recruits, jobs and events.
+
+| Accusation | Effect | Unlocked by |
+|---|---|---|
+| The Clerk | No advantages, no catches | — |
+| The Embezzler | +100 starting gold, tribute +20% | Winning a run |
+| The Scapegoat | Start with a Loyal Veteran on a normal wage | Surviving to day 14 |
+| The Bookkeeper | The morning ledger names the thief's initial; starting loyalty 50 and 15 gold less | Catching 3 thieves (across runs) |
+
+**Audit Levels** stack: 2 = tribute +8% · 3 = thieves 30% bolder · 4 = signing fees +50% · 5 = one more goblin in every job and tribute another +8%. Winning at a level unlocks the next. Score is multiplied by 1 + 0.25 × (level − 1). Progress (wins, best day, thieves caught, best score, max level) is saved in `PlayerPrefs`.
+
 ### The Queen's Tribute (win condition)
 A run lasts **28 days**. At the end of every 7th day the Queen's auditor collects tribute: **250 / 450 / 650 / 900 gold**. It's taken *before* wages, so the Queen always gets paid first. Pay the fourth tribute on day 28 and you're **pardoned**; kill the Goblin King that day as well and you're **vindicated**.
 
@@ -81,8 +93,26 @@ Each member has a hidden **Greed**, hinted at by their description (*honest face
 
 Once a day you can **audit** one member from the Ledger. If they've stolen since they were last caught, you'll probably catch them (harder for high-Sense characters). Then you choose to **dock their pay** (get the gold back), **forgive** them (more loyal, less greedy) or **fire** them. If they're innocent, they're furious (−15 loyalty).
 
-### Tavern (hiring board)
-Three candidates are on the board each morning, already at your party's average level, with their stats, wage and greed hint visible. Hiring costs a **signing fee of two days' wages** (×1.5 if anyone in the party is Cowardly).
+### Tavern (hiring board) & Contracts
+Three candidates are on the board each morning, already at your party's average level, with their stats, wage, greed hint and **traits** visible. Each can be signed on one of three **contracts** (fees ×1.5 if anyone in the party is Cowardly):
+
+| Contract | Signing fee | Then |
+|---|---|---|
+| Day wage | 2 days' wages | Paid nightly, as usual |
+| Loot share | 1 day's wage | No wage; takes **16% of every completed job** (pay + loot). +5 loyalty on days they get a cut, −5 on days they don't |
+| Signing bonus | 5 days' wages | **60% of the wage**, for good |
+
+### Traits
+Every recruit has one trait, and 35% have two (never conflicting ones). There are 20, defined in `Resources/PartyTaxes/Traits.json`. Most are a trade-off: Light-fingered (steals more, loots 25% more), Honest, Loyal, Mercenary, Veteran (+2 levels, +30% wage), Coward (−30% wage, starts Cowardly), Tough, Brawler, Lucky, Haggler (cleric −25%), Pious, Bloodthirsty, Union Rep, Gambler (wage rerolled nightly), Drunkard (hungover after payday), **Nephew of the Queen** (can't be fired or seized, −10% tribute), Medic, Glory Hound, Bookworm (audits +15%), Frugal. Party-wide perks use the best one in the party.
+
+### Raises
+When a party member levels up, they **ask for their raise** instead of taking it (+15% of base wage per level). You can **accept** it (+5 loyalty), **refuse** it (−15 loyalty, wage stays), or **counter** with half: 60% chance minus 5% per Sense above 3, clamped to 30–80%. A failed counter means the full raise and −10 loyalty. Loot-share members don't ask.
+
+### Night Events
+Most nights (70%) something happens, drawn from 34 events in `Resources/PartyTaxes/Events.json`: tavern brawls, a sick mother, forged receipts, the rival accountant who framed you, poachers, the Queen's herald... Each has 1–3 choices; some are gambles. Some only appear from a certain day, with a certain trait in the party, or with enough members. Effects can change gold, loyalty, HP, greed, attributes, XP, wages, cowardice, the next tribute or the next job's pay, or make someone quit. An event appears at most once per run, and you decide in the morning.
+
+**Decisions block the day:** a caught thief, a raise request or a night event must be answered before you take a job or sleep.
+
 
 ### Firing
 You can fire anyone from the Ledger (it asks you to confirm). Severance is one day's wage; if you can't afford it, the rest of the party loses 10 loyalty.
@@ -140,7 +170,7 @@ Members gain XP from kills; each level needs `50 × (level+1) × √level` XP. E
 ### The Final Ledger
 When the run ends, win or lose, the books open: outcome, score, tribute paid, wages, theft and recoveries, and every hire's record (kills, loot, wages, what they stole, and how they left). The biggest thief is finally named.
 
-**Score** = tribute paid + gold kept + 25 per surviving member − 25 per death (+250 if pardoned, +500 more for slaying the Goblin King).
+**Score** = (tribute paid + gold kept + 25 per surviving member − 25 per death + 250 if pardoned + 500 more for slaying the Goblin King) × the Audit Level multiplier. The Final Ledger also shows the accusation, Audit Level, seed and anything the run unlocked.
 
 
 ## Game Over Conditions
@@ -151,16 +181,16 @@ When the run ends, win or lose, the books open: outcome, score, tribute paid, wa
 | **Pardoned** *(win)* | Pay the day-28 tribute |
 | **Hanged** | Miss a second tribute, or miss the final one |
 | **Mutiny** | Average loyalty below 20, or two members below 10 |
-| **Abandoned** | Everyone has deserted, been fired or been seized |
+| **Abandoned** | Everyone has deserted, been fired, been seized or quit |
 | **Slain** | All party members killed in combat |
 
 ---------------------------------------------------------------------------------------
 
 ## Script Architecture
 
-Contains a 9 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul, employment records, and runtime-built UI.
+Contains a 12 part partial manager class and random recruit generator attached to a Manager GameObject, a CharacterData script called PTSoul, employment records, and runtime-built UI.
 
-### `PTManager` — partial class, 9 files
+### `PTManager` — partial class, 12 files
 
 The central game controller. Owns all shared state (gold, party list, enemy list, day counter, UI references, balance constants) and is split into partial files for readability:
 
@@ -169,7 +199,10 @@ The central game controller. Owns all shared state (gold, party list, enemy list
 | `PTManager.cs` | Variables, constants, `GameState` (Town / Combat / GameOver / Victory), `Awake`/`Start`, input setup, shared helpers (`ChangeGold`, `UpdateUI`, `TriggerGameOver`, `SetSunIntensity`) |
 | `PTManager.Party.cs` | Party formation (`GetNextPartyMemberTransform`), `SpawnRandomPartyMember`, `RemovePartyMember` (with a status and fate), `LevelUpTo`, `GetAveragePartyLevel` |
 | `PTManager.Combat.cs` | The auto-combat coroutine (`RunCombat`), stances and targeting, interventions (`TryHazardPay`, `TryPotion`, `TryBribe`, `TryFocusFire`, `TryRetreat`), speed, enemy/boss spawning |
-| `PTManager.Jobs.cs` | The job pool, `RefreshJobBoard`, `TryTakeJob`, `TryRestDay`, `CompleteJob`, the Goblin King |
+| `PTManager.Jobs.cs` | The job pool, `RefreshJobBoard`, `TryTakeJob`, `TryRestDay`, `CompleteJob` (+ loot-share cuts), the Goblin King |
+| `PTManager.Run.cs` | `BeginRun(accusation, auditLevel, seed, daily)`, difficulty modifiers, `RecordRunEnd` (unlocks) |
+| `PTManager.Traits.cs` | `RollTraits`, `GiveTraits`, party-wide trait perks, trait damage/loot helpers |
+| `PTManager.Events.cs` | `DrawNightEvent`, `ResolveEvent`, event effects; raise negotiation (`PendingRaise`, `ResolveRaise`) |
 | `PTManager.Town.cs` | `TrySleep` (the night sequence) + `RestParty`, `TryHeal`, `TryBless`, `TryResurrect`, `RestartRun`, `CanPerformTownAction` |
 | `PTManager.Ledger.cs` | Employment, `RunPayroll`, loyalty events, `RunNightlyTheft`, `TryAudit` + `ResolveConfrontation`, `TryFire`, `ResolveDesertions`, `CheckMutiny`, run totals |
 | `PTManager.Tribute.cs` | Tribute schedule, `CollectTribute` (strikes, seizure, execution), `TriggerVictory`, `RunScore` |
@@ -183,6 +216,12 @@ Builds its own overlay canvas at runtime (no scene setup needed; turn it off wit
 
 ### `PTFinalLedgerPanel` / `PTUIFactory`
 The end-of-run books (outcome, score, totals, per-hire table, biggest thief). `PTUIFactory` holds the shared runtime UI helpers (canvas, panel, row, label, button) so all generated UI looks the same.
+
+### `PTContent`, `PTTrait`, `PTNightEvent` (Data)
+`PTContent` loads `Resources/PartyTaxes/Traits.json` and `Events.json` with `JsonUtility`. **The balance sim reads the same files**, so content edits are immediately reflected in the tuning numbers. Trait fields are additive modifiers (missing = no effect); `special` names the few behaviours that need code.
+
+### `PTRunRules` / `PTRunSetupPanel`
+Accusation and Audit Level rules, unlock conditions, daily/random seeds and `PlayerPrefs` progress; the start-of-run setup screen.
 
 ### `PTJob` (Data Class)
 A contract: name, description, risk, first day, weight, enemy count (× party size), escalation, enemy level bonus, ambush chance, pay (+ per week), loyalty bonus, and boss settings. `PTJob.DefaultPool()` and `PTJob.GoblinKing()` hold the tuned defaults; edit them in the PTManager Inspector.
@@ -488,6 +527,21 @@ These values were tuned with the balance model in `Tools/BalanceSim`. Keep it in
 
 ## ⚖️ Recent Balance Changes
 
+### v0.8 - Phase 3: Variety
+Traits, night events, raise negotiation, loot-share and signing-bonus contracts, accusations, Audit Levels 1–5, and daily/random seeds.
+
+Balance model (Clerk, Audit Level 1, 2,000 runs each):
+
+| Player | Won (vindicated) | Economic loss | Slain |
+|---|---|---|---|
+| *Accountant*: picks contracts and event choices by value, counters raises | 33% (21%) | 56% | 11% |
+| *Naive*: day wage only, accepts every raise, first event choice | 28% | 13% | 59% |
+
+- **Accusations** are within about 4 points of each other at every level (`--matrix`). **Audit Levels** step the accountant from about 31% wins to 25%, 20%, 15% and 11%
+- **Variety** (`--variety`): by day 3 a run has shown about 11 different traits and 2 night events, and two runs share only 41% of their day-1–3 content
+- Re-tuned because Phase 3 made the game easier: pure-upside traits now cost wage (Tough/Brawler/Lucky/Honest/Bloodthirsty +10%, Loyal +5%, Frugal −1 Constitution); loot share is 16% (12% was the strongest contract)
+- The first Audit Level 5 rule tested ("one missed tribute and you hang") made the level unwinnable for a careful scripted player, so Level 5 adds a goblin per job and more tribute instead
+
 ### v0.7 - Phase 2: Jobs & Auto-Combat
 Combat plays itself. You pick a job and a stance, then spend gold on interventions. The single "encounter" became a daily job board, and day 28 offers the optional Goblin King.
 
@@ -575,7 +629,7 @@ Balance model (`python3 Tools/BalanceSim/party_taxes_sim.py`, 2,000 runs per str
 - **Resurrection Pipeline:** Death → DeadCharacterData → Resurrection → ApplyTo with penalties
 - **Log Message Flow:** Any script → PTAdventureLog.Log() → ColorizeMessage → AddVisualEntry → Auto-scroll
 - **Gold Transaction Path:** Any system → ChangeGold() → OnGoldChanged event → UpdateUI (+ action bar refresh) + Sound
-- **Checking changes without Unity:** `dotnet run --project Tools/HeadlessTests` compiles the scripts against API stubs and runs behaviour checks; `python3 Tools/BalanceSim/party_taxes_sim.py` reports balance
+- **Checking changes without Unity:** `dotnet run --project Tools/HeadlessTests` compiles the scripts against API stubs and runs 118 behaviour checks (against the real JSON content); `python3 Tools/BalanceSim/party_taxes_sim.py` reports balance (`--matrix` for accusations × levels, `--variety` for run-to-run variety)
 
 ---
 

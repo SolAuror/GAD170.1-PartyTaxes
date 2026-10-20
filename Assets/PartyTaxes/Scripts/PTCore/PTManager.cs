@@ -73,7 +73,7 @@ public class DeadCharacterData                                                  
 
 public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions                            //inherit from MonoBehaviour and implement the IPlayerActions interface from the SimpleControls input actions
 {
-    public enum GameState { Town, Combat, GameOver, Victory }                                            //what the game is doing right now, decides which actions are allowed
+    public enum GameState { Setup, Town, Combat, GameOver, Victory }                                     //what the game is doing right now, decides which actions are allowed
 #region Variables
   public bool debugMode = false;                                                                             //bool for debug toggling 
 
@@ -167,24 +167,15 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         {
             actionBar = PTActionBar.Create(this);                                                        //build the clickable action buttons
         }
-        SetSunIntensity(2f);                                                                                 //set initial sun intensity
-
-        for (int i = 0; i < startingPartySize; i++)                                                          // Spawn random starting party members
+        State = GameState.Setup;                                                                         //choose an accusation, Audit Level and seed first
+        if (actionBar == null)
         {
-            SpawnRandomPartyMember();                                                                        //spawn a random soul using the base prefab and soul generator
+            BeginRun(Accusation.Clerk, 1, PTRunRules.RandomSeed(), false);                          //no setup screen: start a standard run straight away
         }
-
-        RefreshTavern();                                                                                     //put the first candidates on the tavern board
-        RefreshJobBoard();                                                                                   //and the first contracts on the job board
-        PTAdventureLog.Log("By order of the Queen: you will remit " + NextTributeAmount + " gold to her auditor at the end of day " + NextTributeDay +
-                           ", and every week after, for " + RUN_LENGTH_DAYS + " days. Pay, and be pardoned. Fail twice, and hang.");
-        dailyMsg = "Heil, <partyname>" + partyName + "</partyname>" +                                        //greet the party,
-                   "! You have " + gold +                                                                   //display the party gold
-                   " gold and " + partyMembers.Count +                                                      //display the number of party members
-                   " party members. Daily Wages are " + CalculateTotalDailyWages() + ".";                   //display the total daily wages 
-        daysElapsed++;                                                                                      //increment the day
-        PTAdventureLog.Log(dailyMsg);                                                                       //print the daily message
-        UpdateUI();                                                                                         //update UI with initial values
+        else
+        {
+            UpdateUI();                                                                                  //the action bar shows the run setup screen
+        }
 
         if (debugMode)                                                                                      //if debug mode is enabled, print debug message
         {
@@ -320,6 +311,7 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         PTAdventureLog.Log(message + " Game Over.");
         RunOutcome = outcome;
         State = GameState.GameOver;
+        RecordRunEnd(false);                                                                             //save progress between runs
         UpdateUI();
     }
 

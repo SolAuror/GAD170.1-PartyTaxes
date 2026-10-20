@@ -32,24 +32,37 @@ public partial class PTManager
             candidateObj.SetActive(false);                                                                   //waits off-stage until hired
             PTSoul candidate = candidateObj.GetComponent<PTSoul>();
             if (candidate == null) continue;
-            LevelUpTo(candidate, partyLevel, false);                                                         //candidates arrive at the party's level
-            CreateEmploymentRecord(candidate);
+            GiveTraits(candidate, RollTraits());                                                         //every candidate has a trait or two
+            LevelUpTo(candidate, partyLevel + TraitLevelBonus(candidate), false);                        //candidates arrive at the party's level (Veterans above it)
             tavernCandidates.Add(candidate);
         }
     }
 
-    public int SigningFee(PTSoul candidate)
+    private const int LOOT_SHARE_FEE_DAYS = 1;                                                           //loot share: small fee, no wage, a cut of every job
+    private const float LOOT_SHARE_PERCENT = 0.16f;
+    private const int SIGNING_BONUS_FEE_DAYS = 5;                                                        //signing bonus: big fee up front...
+    private const float SIGNING_BONUS_WAGE = 0.6f;                                                       //...then 60% of the wage, for good
+
+    public float LootSharePercent => LOOT_SHARE_PERCENT;
+
+    public int SigningFee(PTSoul candidate, ContractType contract = ContractType.DayWage)                //what it costs to sign someone on each contract
     {
         if (candidate == null) return 0;
-        float fee = candidate.dailywages * SIGNING_FEE_DAYS;
+        int days = contract == ContractType.LootShare ? LOOT_SHARE_FEE_DAYS : contract == ContractType.SigningBonus ? SIGNING_BONUS_FEE_DAYS : SIGNING_FEE_DAYS;
+        float fee = candidate.dailywages * days * FeeMultiplier;
         if (partyMembers.Exists(member => member.isCowardly))
         {
-            fee *= COWARD_FEE_MULTIPLIER;
+            fee *= COWARD_FEE_MULTIPLIER;                                                                //word gets around
         }
         return Mathf.RoundToInt(fee);
     }
 
-    public void TryHire(int index)                                                                           //hire a candidate from the tavern board
+    public int ContractWage(PTSoul candidate, ContractType contract) =>                                  //the daily wage they'd draw on each contract
+        candidate == null ? 0 : contract == ContractType.LootShare ? 0 :
+        contract == ContractType.SigningBonus ? candidate.WageFor(Mathf.Max(1, Mathf.RoundToInt(candidate.baseWage * SIGNING_BONUS_WAGE))) :
+        candidate.dailywages;
+
+    public void TryHire(int index, ContractType contract = ContractType.DayWage)                         //hire a candidate from the tavern board
     {
         if (!CanPerformTownAction("You are in Combat! Win the battle before hiring anyone!")) return;
         if (index < 0 || index >= tavernCandidates.Count) return;
@@ -60,7 +73,7 @@ public partial class PTManager
         }
 
         PTSoul candidate = tavernCandidates[index];
-        int fee = SigningFee(candidate);
+        int fee = SigningFee(candidate, contract);
         if (gold < fee)
         {
             PTAdventureLog.Log(candidate.Name + " wants " + fee + " gold to sign on, but you only have " + gold + " gold.");
@@ -69,7 +82,7 @@ public partial class PTManager
 
         ChangeGold(-fee);
         tavernCandidates.RemoveAt(index);
-        LevelUpTo(candidate, GetAveragePartyLevel(), false);                                                 //in case the party levelled since the morning
+        LevelUpTo(candidate, GetAveragePartyLevel() + TraitLevelBonus(candidate), false);                //in case the party levelled since the morning
         candidate.currentHP = candidate.maxHP;
         Quaternion rotation;
         Vector3 position = GetNextPartyMemberTransform(out rotation);
@@ -78,8 +91,24 @@ public partial class PTManager
         candidate.gameObject.SetActive(true);
         partyMembers.Add(candidate);
         Employ(candidate);
+        candidate.employment.contract = contract;
+        if (contract == ContractType.SigningBonus)
+        {
+            candidate.baseWage = Mathf.Max(1, Mathf.RoundToInt(candidate.baseWage * SIGNING_BONUS_WAGE));
+        }
+        candidate.RecalculateWage();                                                                     //loot share draws no wage
         candidate.UpdateUI();
-        PTAdventureLog.Log(candidate.Name + " joined " + partyName + "! Signing fee " + fee + " gold, wages " + candidate.dailywages + " gold a day.");
+        string terms = contract == ContractType.LootShare ? "a " + Mathf.RoundToInt(LOOT_SHARE_PERCENT * 100) + "% cut of every job"
+                     : candidate.dailywages + " gold a day" + (contract == ContractType.SigningBonus ? " (signing bonus deal)" : "");
+        PTAdventureLog.Log(candidate.Name + " joined " + partyName + "! Signing fee " + fee + " gold, for " + terms + ".");
+        if (candidate.employment.traits.Count > 0)
+        {
+            foreach (string id in candidate.employment.traits)
+            {
+                PTTrait trait = PTContent.Trait(id);
+                if (trait != null) PTAdventureLog.Log(candidate.Name + " is " + trait.name + ": " + trait.description);
+            }
+        }
         UpdateUI();
     }
 

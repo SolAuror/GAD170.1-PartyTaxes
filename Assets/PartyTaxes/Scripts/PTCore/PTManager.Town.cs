@@ -10,7 +10,7 @@ public partial class PTManager
 {
     bool CanPerformTownAction(string combatMessage = "You must return to town first!")                   //helper to check common town action preconditions
     {
-        if (IsRunOver) return false;                                                                     //block if the run is over
+        if (IsRunOver || State == GameState.Setup) return false;                                         //block if the run is over or hasn't started
         if (State == GameState.Combat)                                                                   //block if in combat
         {
             PTAdventureLog.Log(combatMessage);
@@ -34,9 +34,10 @@ public partial class PTManager
             PTAdventureLog.Log("You cannot sleep during a battle!");                                     //log cannot sleep message
             return;
         }
-        if (PendingConfrontation != null)                                                                //a caught thief needs a decision first
+        if (State == GameState.Setup) return;
+        if (HasPendingDecision)                                                                          //a caught thief, a raise request or a night event needs an answer first
         {
-            PTAdventureLog.Log("Decide what to do about " + PendingConfrontation.Name + " before you turn in.");
+            PTAdventureLog.Log("Decide " + PendingDecisionName + " before you turn in.");
             return;
         }
 
@@ -56,6 +57,7 @@ public partial class PTManager
         RestParty(paid);                                                                                 //paid members rest and recover health, unpaid ones don't
         int expectedGold = gold;
         RunNightlyTheft();                                                                               //sticky fingers in the night
+        DrawNightEvent();                                                                                //something happens in the night, decided in the morning
 
         daysElapsed++;                                                                                   //increment the day
         PTAdventureLog.Log("Day " + daysElapsed + " dawns.");
@@ -71,6 +73,10 @@ public partial class PTManager
         hasHealed = false;                                                                               //reset hasHealed for the new day
         hasBeenBlessed = false;                                                                          //reset hasBeenBlessed for the new day
         hasAudited = false;                                                                              //one audit per day
+        foreach (PTSoul member in partyMembers)
+        {
+            if (member.employment != null) member.employment.tookCutToday = false;                       //loot share: a new day's takings
+        }
         RefreshTavern();                                                                                 //new faces at the tavern
         RefreshJobBoard();                                                                               //new contracts on the job board
 
@@ -81,6 +87,10 @@ public partial class PTManager
                   (IsTributeDay ? "The Queen's auditor is in town: " + NextTributeAmount + " gold is due TONIGHT." //tribute reminder
                                 : NextTributeAmount + " gold is due to the Queen in " + DaysUntilTribute + " day(s).");
         PTAdventureLog.Log(dailyMsg);                                                                    //log the daily message
+        if (PendingEvent != null)
+        {
+            PTAdventureLog.Log("Overnight: " + PendingEvent.title + ". " + EventText(PendingEvent.text));
+        }
         UpdateUI();                                                                                      //update UI after sleeping
 
         if (debugMode)
@@ -95,7 +105,7 @@ public partial class PTManager
         foreach (PTSoul member in partyMembers)
         {
             if (!paidMembers.Contains(member)) continue;                                                 //unpaid and resentful, they sleep poorly
-            totalRested += member.RestoreHP(Mathf.RoundToInt(member.maxHP * REST_HEAL_PERCENT));
+            totalRested += member.RestoreHP(Mathf.RoundToInt(member.maxHP * (REST_HEAL_PERCENT + RestBonus))); //a Medic in the party helps
         }
         if (totalRested > 0)
         {
@@ -213,7 +223,7 @@ public partial class PTManager
             foreach (PTSoul member in partyMembers)
             {
                 member.Bless();
-                ChangeLoyalty(member, LOYALTY_BLESSED);                                                  //a blessing on your coin earns some goodwill
+                ChangeLoyalty(member, LOYALTY_BLESSED + (member.employment != null ? Mathf.RoundToInt(member.employment.TraitSum(t => t.blessLoyalty)) : 0)); //a blessing earns goodwill (Pious even more)
             }
 
             hasBeenBlessed = true;                                                                              //set blessed as used for the day

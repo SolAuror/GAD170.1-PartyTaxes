@@ -24,7 +24,7 @@ namespace UnityEngine
     public static class Debug { public static void Log(object o) {} public static void LogWarning(object o) {} public static void LogError(object o) {} }
     public static class Time { public static float deltaTime, time, unscaledTime, unscaledDeltaTime, timeScale; }
     public static class Application { public static void Quit() {} public static string version; public static bool isEditor; }
-    public static class PlayerPrefs { public static int GetInt(string k, int d = 0) => d; public static void SetInt(string k, int v) {} public static void Save() {} }
+    public static class PlayerPrefs { static readonly System.Collections.Generic.Dictionary<string, int> Store = new System.Collections.Generic.Dictionary<string, int>(); public static int GetInt(string k, int d = 0) => Store.TryGetValue(k, out int v) ? v : d; public static void SetInt(string k, int v) { Store[k] = v; } public static void Save() {} public static void DeleteAll() { Store.Clear(); } }
     public class Coroutine {}
     public class YieldInstruction {}
     public sealed class WaitForSeconds : YieldInstruction { public WaitForSeconds(float s) {} }

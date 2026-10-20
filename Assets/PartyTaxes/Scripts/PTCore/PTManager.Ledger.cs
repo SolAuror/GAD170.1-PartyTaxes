@@ -20,7 +20,8 @@ public partial class PTManager
     private const int LOYALTY_NO_SEVERANCE = -10;                                                            //watched someone get fired without severance
     private const int LOYALTY_WRONGLY_ACCUSED = -15;                                                         //audited while innocent
     private const int LOYALTY_DOCKED = -10;                                                                  //caught stealing and had their pay docked
-    private const int LOYALTY_FORGIVEN = 15;                                                                 //caught stealing and forgiven
+    private const int LOYALTY_FORGIVEN = 15;                                                             //caught stealing and forgiven
+    private const int LOYALTY_SHARE_NO_TAKE = -5;                                                        //loot share: no cut today (rest day, retreat)
     private const float GREED_MIN = 0.1f;
     private const float GREED_MAX = 0.9f;
     private const float THEFT_SCALE = 0.7f;                                                                  //nightly theft chance = greed x (1 - loyalty/150) x this
@@ -39,7 +40,8 @@ public partial class PTManager
     public readonly List<PTEmployeeRecord> runLedger = new List<PTEmployeeRecord>();                       //everyone hired this run, for the final ledger
     public bool hasAudited = false;                                                                          //one audit per day
     public PTSoul PendingConfrontation { get; private set; }                                                 //a caught thief waiting for your decision
-    public int LastNightMissing { get; private set; }                                                        //gold that vanished overnight
+    public int LastNightMissing { get; private set; }                                                    //gold that vanished overnight
+    public PTSoul LastNightThief { get; private set; }                                                   //who took the most (only the Bookkeeper gets a clue)
     public int UnpaidLastNight { get; private set; }                                                         //members who went unpaid last night
     public int TotalWagesPaid { get; private set; }
     public int TotalStolen { get; private set; }
@@ -57,12 +59,14 @@ public partial class PTManager
         return soul.employment;
     }
 
-    void Employ(PTSoul soul, int loyalty = LOYALTY_START)                                                    //put a soul on the payroll and in the run ledger
+    void Employ(PTSoul soul, int loyalty = -1)                                                           //put a soul on the payroll and in the run ledger (-1 = the run's starting loyalty + traits)
     {
         PTEmployeeRecord job = CreateEmploymentRecord(soul);
         job.status = EmploymentStatus.Employed;
         job.fate = "";
-        job.loyalty = loyalty;
+        job.loyalty = loyalty >= 0
+            ? loyalty
+            : Mathf.Clamp(PTRunRules.StartingLoyalty(CurrentAccusation, LOYALTY_START) + Mathf.RoundToInt(job.TraitSum(t => t.startLoyalty)), 0, 100);
         job.nightsUnpaid = 0;
         job.payTonight = true;
         if (!runLedger.Contains(job))
@@ -92,7 +96,7 @@ public partial class PTManager
 #endregion
 
 #region Night: payroll, desertion, mutiny, theft
-    HashSet<PTSoul> RunPayroll()                                                                             //pay everyone ticked for payroll while the gold lasts; returns who was paid
+    HashSet<PTSoul> RunPayroll()                                                                         //pay everyone ticked for payroll while the gold lasts; returns who was paid (loot-share members count if they got a cut today)
     {
         HashSet<PTSoul> paid = new HashSet<PTSoul>();
         List<string> unpaidNames = new List<string>();
@@ -103,20 +107,42 @@ public partial class PTManager
         {
             PTEmployeeRecord job = member.employment;
             if (job == null) continue;
-            if (job.payTonight && available >= member.dailywages)
+            job.hungover = false;                                                                        //yesterday's hangover has worn off
+            if (job.HasSpecial("gambler") && !job.OnLootShare)                                           //Gambler: tonight's wage is a roll of the dice
+            {
+                member.dailywages = Mathf.Max(1, Mathf.RoundToInt(member.WageForLevel() * Random.Range(0.5f, 1.5f)));
+                job.requestedWage = 0;                                                                       //a gambler's wage already follows their level
+            }
+            if (job.OnLootShare)                                                                         //loot share: no wage, happy if they got a cut today
+            {
+                job.ChangeLoyalty(job.tookCutToday ? LOYALTY_PAID + Mathf.RoundToInt(job.TraitSum(t => t.paidLoyalty)) : LOYALTY_SHARE_NO_TAKE);
+                job.nightsUnpaid = 0;
+                paid.Add(member);
+            }
+            else if (job.payTonight && available >= member.dailywages)
             {
                 available -= member.dailywages;
                 totalPaid += member.dailywages;
                 job.wagesReceived += member.dailywages;
                 job.nightsUnpaid = 0;
-                job.ChangeLoyalty(LOYALTY_PAID);
+                job.ChangeLoyalty(LOYALTY_PAID + Mathf.RoundToInt(job.TraitSum(t => t.paidLoyalty)));
                 paid.Add(member);
+                if (job.HasSpecial("drunkard") && Random.value < HUNGOVER_CHANCE)                        //Drunkard: payday, then the tavern
+                {
+                    job.hungover = true;
+                    PTAdventureLog.Log(member.Name + " spends their wages at the tavern. They'll be hungover tomorrow.");
+                }
             }
             else
             {
                 job.nightsUnpaid++;
-                job.ChangeLoyalty(LOYALTY_UNPAID);
+                job.ChangeLoyalty(Mathf.RoundToInt(LOYALTY_UNPAID * (1f + job.TraitSum(t => t.unpaidLoyaltyPercent) / 100f)));
                 unpaidNames.Add(member.Name + (job.payTonight ? "" : " (withheld)"));
+                if (job.HasSpecial("union_rep"))                                                         //Union Rep: stiff them and everyone hears about it
+                {
+                    ChangePartyLoyalty(UNION_REP_EXTRA_LOYALTY, member);
+                    PTAdventureLog.Log(member.Name + " tells the whole party they went unpaid. Everyone else loses loyalty too.");
+                }
             }
         }
 
@@ -168,14 +194,16 @@ public partial class PTManager
         return false;
     }
 
-    void RunNightlyTheft()                                                                                   //each member may skim from the purse; greedier and less loyal members skim more often
+    void RunNightlyTheft()                                                                               //each member may skim from the purse; greedier and less loyal members skim more often
     {
         int missing = 0;
+        int biggestCut = 0;
+        LastNightThief = null;
         foreach (PTSoul member in partyMembers)
         {
             PTEmployeeRecord job = member.employment;
             if (job == null || gold <= 0) continue;
-            float chance = job.greed * (1f - job.loyalty / THEFT_LOYALTY_DIVISOR) * THEFT_SCALE;
+            float chance = job.greed * (1f - job.loyalty / THEFT_LOYALTY_DIVISOR) * THEFT_SCALE * TheftMultiplier;
             if (Random.value < chance)
             {
                 int cut = Mathf.Max(1, Mathf.FloorToInt(gold * Random.Range(THEFT_CUT_MIN, THEFT_CUT_MAX)));
@@ -183,18 +211,21 @@ public partial class PTManager
                 job.stolenTotal += cut;
                 job.stolenUnrecovered += cut;
                 missing += cut;
+                if (cut > biggestCut) { biggestCut = cut; LastNightThief = member; }
             }
         }
         LastNightMissing = missing;
         TotalStolen += missing;
     }
 
-    void LogMorningLedger(int expectedGold)                                                                  //the accountant counts the purse every morning
+    void LogMorningLedger(int expectedGold)                                                              //the accountant counts the purse every morning
     {
         if (LastNightMissing > 0)
         {
-            PTAdventureLog.Log("Morning ledger: expected " + expectedGold + " gold, counted " + gold + ". " + LastNightMissing +
-                               " gold is missing! Someone in the party has sticky fingers.");
+            string clue = CurrentAccusation == Accusation.Bookkeeper && LastNightThief != null           //the Bookkeeper reads the ink smudges
+                ? " The smudges in the ledger point to someone whose name starts with '" + LastNightThief.Name.Substring(0, 1) + "'."
+                : " Someone in the party has sticky fingers.";
+            PTAdventureLog.Log("Morning ledger: expected " + expectedGold + " gold, counted " + gold + ". " + LastNightMissing + " gold is missing!" + clue);
         }
         else
         {
@@ -223,10 +254,11 @@ public partial class PTManager
         PTEmployeeRecord job = suspect.employment;
         if (job.stolenUnrecovered > 0)
         {
-            float chance = Mathf.Clamp(AUDIT_BASE_CHANCE - (suspect.atrSense - 3) * AUDIT_CHANCE_PER_SENSE, AUDIT_MIN_CHANCE, AUDIT_MAX_CHANCE);
+            float chance = Mathf.Clamp(AUDIT_BASE_CHANCE - (suspect.atrSense - 3) * AUDIT_CHANCE_PER_SENSE, AUDIT_MIN_CHANCE, AUDIT_MAX_CHANCE) + AuditBonus; //a Bookworm in the party helps
             if (Random.value < chance)
             {
                 PendingConfrontation = suspect;
+                ThievesCaughtThisRun++;
                 PTAdventureLog.Log("Caught! " + suspect.Name + "'s purse is " + job.stolenUnrecovered + " gold heavier than their wages explain. What will you do?");
             }
             else
@@ -266,6 +298,12 @@ public partial class PTManager
                 PTAdventureLog.Log("You forgive " + thief.Name + ". Shamed, they swear it won't happen again.");
                 break;
             case Confrontation.Fire:
+                if (CannotBeFired(thief))                                                                //the Queen's nephew stays, whatever he does
+                {
+                    PendingConfrontation = thief;
+                    PTAdventureLog.Log(thief.Name + " can't be fired. The Queen would never forgive you. Dock their pay or forgive them.");
+                    return;
+                }
                 PTAdventureLog.Log("You throw " + thief.Name + " out of the party for theft.");
                 FireMember(thief, true);
                 break;
@@ -279,6 +317,11 @@ public partial class PTManager
     {
         if (!CanPerformTownAction("You can't fire anyone in the middle of a battle!")) return;
         if (member == null || !partyMembers.Contains(member)) return;
+        if (CannotBeFired(member))
+        {
+            PTAdventureLog.Log(member.Name + " can't be fired. Their aunt is the Queen.");
+            return;
+        }
         if (member == PendingConfrontation)
         {
             ResolveConfrontation(Confrontation.Fire);

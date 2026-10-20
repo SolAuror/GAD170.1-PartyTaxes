@@ -21,7 +21,8 @@ public partial class PTManager
     public PTJob ActiveJob { get; private set; }                                                             //the job being fought right now
     public bool SlewGoblinKing { get; private set; }
 
-    public int JobPay(PTJob job) => job == null ? 0 : job.basePay + job.payPerWeek * ((Mathf.Max(1, daysElapsed) - 1) / 7);
+    public int JobPay(PTJob job) => job == null ? 0 :                                                        //base + weekly growth, +/- any event bonus on the next job
+        Mathf.RoundToInt((job.basePay + job.payPerWeek * ((Mathf.Max(1, daysElapsed) - 1) / 7)) * (1f + NextJobPayPercent / 100f));
 
     void RefreshJobBoard()                                                                                   //draw this morning's contracts
     {
@@ -65,9 +66,9 @@ public partial class PTManager
             PTAdventureLog.Log("You have no one to send! Hire someone at the tavern first.");
             return;
         }
-        if (PendingConfrontation != null)
+        if (HasPendingDecision)                                                                          //a caught thief, a raise request or a night event needs an answer first
         {
-            PTAdventureLog.Log("Decide what to do about " + PendingConfrontation.Name + " first.");
+            PTAdventureLog.Log("Decide " + PendingDecisionName + " first.");
             return;
         }
 
@@ -120,6 +121,7 @@ public partial class PTManager
         foreach (PTSoul member in partyMembers)
         {
             totalRested += member.RestoreHP(Mathf.RoundToInt(member.maxHP * REST_DAY_HEAL_PERCENT));
+            if (member.employment != null && member.employment.HasSpecial("glory_hound")) member.employment.ChangeLoyalty(-GLORY_HOUND_LOYALTY); //Glory Hounds hate a day off
         }
         PTAdventureLog.Log("The party takes the day off and recovers " + totalRested + " HP. Wages are still due tonight.");
         UpdateUI();
@@ -128,8 +130,26 @@ public partial class PTManager
     void CompleteJob(PTJob job)                                                                              //pay out a finished contract
     {
         int pay = JobPay(job);
+        NextJobPayPercent = 0;                                                                           //an event bonus applies to one job
         ChangeGold(pay);
         if (job.loyaltyBonus != 0) ChangePartyLoyalty(job.loyaltyBonus);
+        int takings = pay + fightLoot;                                                                   //loot-share members take their cut of everything the job brought in
+        fightLoot = 0;
+        foreach (PTSoul member in partyMembers)
+        {
+            PTEmployeeRecord record = member.employment;
+            if (record == null) continue;
+            if (record.OnLootShare)
+            {
+                int cut = Mathf.RoundToInt(takings * LootSharePercent);
+                ChangeGold(-cut);
+                record.wagesReceived += cut;
+                record.tookCutToday = true;
+                TotalWagesPaid += cut;
+                PTAdventureLog.Log(member.Name + " takes their " + Mathf.RoundToInt(LootSharePercent * 100) + "% cut: " + cut + " gold.");
+            }
+            if (job.risk == JobRisk.High && record.HasSpecial("glory_hound")) record.ChangeLoyalty(GLORY_HOUND_LOYALTY); //Glory Hounds live for this
+        }
         if (job.kind == JobKind.Boss)
         {
             SlewGoblinKing = true;

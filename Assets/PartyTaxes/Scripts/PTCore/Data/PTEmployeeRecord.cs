@@ -2,7 +2,8 @@ using UnityEngine;
 
 namespace PartyTaxes
 {
-    public enum EmploymentStatus { Candidate, Employed, Slain, Deserted, Fired, Seized }
+    public enum EmploymentStatus { Candidate, Employed, Slain, Deserted, Fired, Seized, Quit }
+    public enum ContractType { DayWage, LootShare, SigningBonus }
 
     /// <summary>
     /// A party member's employment file: loyalty, greed, pay, and what they've been up to.
@@ -29,7 +30,66 @@ namespace PartyTaxes
         public int timesDied = 0;
         public int dayHired = 1;
 
+        public ContractType contract = ContractType.DayWage;
+        public System.Collections.Generic.List<string> traits = new System.Collections.Generic.List<string>();   // trait ids (see PTContent)
+        public int requestedWage = 0;                              // a raise they've asked for after levelling up (0 = none)
+        public bool hungover = false;                              // Drunkard: fights at -30% damage today
+        public bool tookCutToday = false;                          // Loot share: got a cut of today's job
+        public int killsThisFight = 0;                             // Bloodthirsty: did they land a kill?
+
         public bool IsEmployed => status == EmploymentStatus.Employed;
+        public bool OnLootShare => contract == ContractType.LootShare;
+
+        public bool HasTrait(string id) => traits.Contains(id);
+
+        public bool HasSpecial(string special)
+        {
+            foreach (string id in traits)
+            {
+                PTTrait trait = PTContent.Trait(id);
+                if (trait != null && trait.special == special) return true;
+            }
+            return false;
+        }
+
+        /// Sum of one trait modifier over this person's traits.
+        public float TraitSum(System.Func<PTTrait, float> field)
+        {
+            float total = 0f;
+            foreach (string id in traits)
+            {
+                PTTrait trait = PTContent.Trait(id);
+                if (trait != null) total += field(trait);
+            }
+            return total;
+        }
+
+        public bool TraitFlag(System.Func<PTTrait, bool> flag)
+        {
+            foreach (string id in traits)
+            {
+                PTTrait trait = PTContent.Trait(id);
+                if (trait != null && flag(trait)) return true;
+            }
+            return false;
+        }
+
+        /// Trait names for display, e.g. "Loyal, Veteran".
+        public string TraitNames
+        {
+            get
+            {
+                System.Collections.Generic.List<string> names = new System.Collections.Generic.List<string>();
+                foreach (string id in traits)
+                {
+                    PTTrait trait = PTContent.Trait(id);
+                    if (trait != null) names.Add(trait.name);
+                }
+                return string.Join(", ", names);
+            }
+        }
+
+        public string ContractName => contract == ContractType.LootShare ? "Loot share" : contract == ContractType.SigningBonus ? "Signing bonus" : "Day wage";
 
         public void ChangeLoyalty(int amount)
         {

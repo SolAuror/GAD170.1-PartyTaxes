@@ -6,8 +6,8 @@ using PartyTaxes;
 /// The actions themselves (TrySleep, TryHeal, TryEncounter, TryAttack...) live in the Town and Combat parts.
 public partial class PTManager
 {
-    public int HealCost => partyMembers.Count * HEAL_COST_PER_MEMBER;                                        //10 gold per party member
-    public int BlessCost => partyMembers.Count * BLESS_COST_PER_MEMBER;                                      //100 gold per party member
+    public int HealCost => Mathf.RoundToInt(partyMembers.Count * HEAL_COST_PER_MEMBER * (1f - ClericDiscount)); //10 gold per party member (a Haggler gets 25% off)
+    public int BlessCost => Mathf.RoundToInt(partyMembers.Count * BLESS_COST_PER_MEMBER * (1f - ClericDiscount)); //100 gold per party member
     public int FleeCost => Mathf.Max(1, Mathf.FloorToInt(gold * FLEE_COST_PERCENT));                        //10% of current gold, minimum 1
     public int TotalDailyWages => CalculateTotalDailyWages();
     public bool PartyFull => partyMembers.Count >= maxPartyCount;
