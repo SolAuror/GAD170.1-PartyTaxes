@@ -252,16 +252,10 @@ public partial class PTManager : MonoBehaviour, SimpleControls.IPlayerActions   
         }
     }
 
-    void StyleHud()                                                                                      //Method to turn the HUD prefab's texts into things in the world (see PTUIFactory.WrapInPlate)
+    void StyleHud()                                                                                      //Method to turn the HUD prefab's texts into things in the world (see PTUIFactory.StyleHud)
     {
-        const float edge = 24f;                                                                          //gap from the screen edges
-        const float bottomRow = 236f;                                                                    //party, gold and day sit just above the adventure log
-        PTUIFactory.WrapInPlate(controlsText, new Vector2(0f, 1f), new Vector2(edge, -edge - 6f), PTUITheme.Body, 22f, PTPlateStyle.Note);   //a note tacked up
-        RectTransform banner = PTUIFactory.WrapInPlate(battleText, new Vector2(0.5f, 1f), new Vector2(0f, -12f), PTUITheme.Heading, 30f, PTPlateStyle.Banner);
-        battleBanner = banner != null ? banner.GetComponent<Image>() : null;
-        PTUIFactory.WrapInPlate(PartyNameText, new Vector2(0f, 0f), new Vector2(edge, bottomRow), PTUITheme.Heading, 28f, PTPlateStyle.Tag);   //the company's tag
-        PTUIFactory.WrapInPlate(goldText, new Vector2(0.5f, 0f), new Vector2(0f, bottomRow), PTUITheme.Body, 30f, PTPlateStyle.Tag, PTUITheme.Coin);
-        PTUIFactory.WrapInPlate(dayText, new Vector2(1f, 0f), new Vector2(-edge, bottomRow), PTUITheme.Heading, 26f, PTPlateStyle.Tag);
+        Canvas hud = goldText != null ? goldText.canvas : null;
+        battleBanner = PTUIFactory.StyleHud(hud != null ? hud.rootCanvas.transform : null);              //does nothing to a HUD that was baked in the editor
     }
 
     void UpdateControlsDisplay()                                                                         //Method to update controls display based on context

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Text;
 using UnityEngine;
@@ -9,61 +10,94 @@ namespace PartyTaxes
     /// <summary>
     /// The end-of-run "Final Ledger", a page from your ledger book: how the run ended (stamped across it), the score,
     /// where the money went, and every hire's books, including who was stealing from you all along.
-    /// Built at runtime by PTActionBar when the run ends.
+    /// Shown by PTActionBar when the run ends: built at runtime, or re-bound to a baked copy (Party Taxes > Bake UI).
     /// </summary>
     public class PTFinalLedgerPanel : MonoBehaviour
     {
+        public const string PrefabName = "PT Final Ledger";
         private const float PanelWidth = 980f;
+        private static readonly float[] Columns = { 0.36f, 0.44f, 0.54f, 0.64f, 0.73f };   // the <pos=> columns in BuildTable
+
+        private PTUIBuilder ui;
 
         public static PTFinalLedgerPanel Show(PTManager manager)
         {
-            RectTransform canvas = PTUIFactory.CreateCanvas("PT Final Ledger", 20, true);
-            PTFinalLedgerPanel ledger = canvas.gameObject.AddComponent<PTFinalLedgerPanel>();
+            PTFinalLedgerPanel ledger = PTUIBuilder.FindBaked<PTFinalLedgerPanel>(PrefabName);
+            bool baked = ledger != null;
+            RectTransform canvas = baked ? ledger.GetComponent<RectTransform>() : PTUIFactory.CreateCanvas(PrefabName, 20, true);
+            if (!baked) ledger = canvas.gameObject.AddComponent<PTFinalLedgerPanel>();
+            ledger.ui = new PTUIBuilder(baked ? canvas : null);
             ledger.Build(canvas, manager);
             return ledger;
         }
 
+        /// Editor bake: the page with preview text, switched off (it shows itself when a run ends).
+        public static GameObject Bake(PTManager manager)
+        {
+            RectTransform canvas = PTUIFactory.CreateCanvas(PrefabName, 20, true);
+            PTFinalLedgerPanel ledger = canvas.gameObject.AddComponent<PTFinalLedgerPanel>();
+            ledger.ui = new PTUIBuilder(null, true);
+            ledger.Build(canvas, manager);
+            return canvas.gameObject;
+        }
+
         private void Build(RectTransform canvas, PTManager manager)
         {
-            RectTransform panel = PTUIFactory.CreatePanel("Ledger Page", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth, 48, 10f);
-            panel.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(64, 52, 44, 52);   // binding on the left, page edges on the right
-            PTUIFactory.Slice(panel.GetComponent<Image>(), PTUITheme.LedgerPage, 2f, PTUITheme.PaperFlat);
-            PTUIFactory.AddShadow(panel.GetComponent<Image>(), new Vector2(8f, -8f));
-            PTUIFactory.AddMarginLines(panel, 48f);
-            panel.localRotation = Quaternion.Euler(0f, 0f, 0.6f);
-
-            TextMeshProUGUI title = PTUIFactory.CreateTitle("Title", panel, 60f, 70f);
-            title.text = "The Final Ledger";
-            PTUIFactory.CreateStamp(panel, manager.RunOutcome, manager.State == PTManager.GameState.Victory ? PTUITheme.StampGreen : PTUITheme.StampRed,
-                                    new Vector2(1f, 1f), new Vector2(-136f, -126f), new Vector2(260f, 104f), 9f);
-            PTUIFactory.CreateDivider(panel);
-
-            TextMeshProUGUI subtitle = PTUIFactory.CreateLabel("Subtitle", panel, 24f, TextAlignmentOptions.Center, 34f);
-            subtitle.text = "Day " + manager.daysElapsed + " of " + manager.RunLengthDays + "  ·  Score " + manager.RunScore;
-
-            TextMeshProUGUI runInfo = PTUIFactory.CreateLabel("RunInfo", panel, 18f, TextAlignmentOptions.Center, 28f);
-            runInfo.text = PTRunRules.Name(manager.CurrentAccusation) + "  ·  Audit Level " + manager.AuditLevel + "  ·  " +
-                           (manager.IsDailyRun ? "Daily run " : "Seed ") + manager.RunSeed;
-
-            if (manager.RunUnlocks.Count > 0)
+            RectTransform panel = ui.Make("Page", () =>
             {
-                TextMeshProUGUI unlocks = PTUIFactory.CreateLabel("Unlocks", panel, 22f, TextAlignmentOptions.Center, 30f * manager.RunUnlocks.Count);
-                unlocks.text = "<color=" + PTUITheme.GoldInk + ">" + string.Join("\n", manager.RunUnlocks) + "</color>";
-            }
+                RectTransform page = PTUIFactory.CreatePanel("Page", canvas, new Vector2(0.5f, 0.5f), Vector2.zero, PanelWidth,
+                                                             new RectOffset(66, 54, 44, 50), 8f, PTUITheme.LedgerPage);   // binding on the left, page edges on the right
+                PTUIFactory.AddShadow(PTUIFactory.BackgroundOf(page), new Vector2(8f, -8f));
+                PTUIFactory.AddMarginLines(page, 48f);
+                page.localRotation = Quaternion.Euler(0f, 0f, 0.4f);
+                return page;
+            });
 
-            TextMeshProUGUI totals = PTUIFactory.CreateLabel("Totals", panel, 20f, TextAlignmentOptions.Left, 110f);
-            totals.text = BuildTotals(manager);
+            ui.Make("Page.Title", () =>
+            {
+                TextMeshProUGUI title = PTUIFactory.CreateTitle("Page.Title", panel, 60f, 68f);
+                title.text = "The Final Ledger";
+                return title;
+            });
+            bool won = manager.State == PTManager.GameState.Victory;
+            RectTransform stamp = ui.Make("Page.Stamp", () => PTUIFactory.CreateStamp(panel, "Verdict", PTUITheme.StampRed,
+                                                                                    new Vector2(1f, 1f), new Vector2(-136f, -118f), new Vector2(260f, 100f), 9f));
+            PTUIFactory.SetStamp(stamp, ui.Baking ? "Pardoned" : manager.RunOutcome, won || ui.Baking ? PTUITheme.StampGreen : PTUITheme.StampRed);
+            ui.Make("Page.Divider", () => PTUIFactory.CreateDivider(panel));
 
-            TextMeshProUGUI table = PTUIFactory.CreateLabel("Books", panel, 18f, TextAlignmentOptions.TopLeft, 40f + 26f * manager.runLedger.Count);
-            table.text = BuildTable(manager);
-            PTUIFactory.AddColumnRules(table.rectTransform, new[] { 0.36f, 0.44f, 0.54f, 0.64f, 0.73f });   // the <pos=> columns in BuildTable
+            Fill("Page.Subtitle", panel, 24f, TextAlignmentOptions.Center,
+                 () => "Day " + manager.daysElapsed + " of " + manager.RunLengthDays + "  ·  Score " + manager.RunScore, "Day 28 of 28  ·  Score 2140");
+            Fill("Page.RunInfo", panel, 18f, TextAlignmentOptions.Center,
+                 () => PTRunRules.Name(manager.CurrentAccusation) + "  ·  Audit Level " + manager.AuditLevel + "  ·  " +
+                       (manager.IsDailyRun ? "Daily run " : "Seed ") + manager.RunSeed, "The Clerk  ·  Audit Level 1  ·  Seed 482913");
+            TextMeshProUGUI unlocks = Fill("Page.Unlocks", panel, 22f, TextAlignmentOptions.Center,
+                 () => PTUITheme.Tint(string.Join("\n", manager.RunUnlocks), PTUITheme.GoldInk), PTUITheme.Tint("Audit Level 2 unlocked!", PTUITheme.GoldInk));
+            if (!ui.Baking) unlocks.gameObject.SetActive(manager.RunUnlocks.Count > 0);
+            Fill("Page.Totals", panel, 20f, TextAlignmentOptions.Left, () => BuildTotals(manager),
+                 "Tribute paid to the Queen: <b>900g</b><pos=50%>Gold left in your purse: <b>212g</b>\nWages paid: 1210g<pos=50%>Severance paid: 40g\n" +
+                 "Stolen from you: 310g<pos=50%>Recovered by audits: 95g\nHeroes hired: 6<pos=50%>Deaths: 3  ·  Strikes: 0");
+            TextMeshProUGUI table = Fill("Page.Books", panel, 18f, TextAlignmentOptions.TopLeft, () => BuildTable(manager),
+                 "<b><u>Name<pos=36%>Kills<pos=44%>Looted<pos=54%>Wages<pos=64%>Stole<pos=73%>Fate</u></b>\nMira the Bold<pos=36%>14<pos=44%>220g<pos=54%>310g<pos=64%>-<pos=73%>Still with you (Content)");
+            PTUIFactory.AddColumnRules(table.rectTransform, Columns);
+            Fill("Page.Highlights", panel, 20f, TextAlignmentOptions.Center, () => BuildHighlights(manager),
+                 "Biggest thief: <b>Gorrik</b>, 160g behind your back.\nBest earner: <b>Mira the Bold</b>, 220g looted from 14 kills.");
 
-            TextMeshProUGUI highlights = PTUIFactory.CreateLabel("Highlights", panel, 20f, TextAlignmentOptions.Center, 56f);
-            highlights.text = BuildHighlights(manager);
+            Button restart = ui.Make("Page.Restart", () =>
+            {
+                Button button = PTUIFactory.CreateButton(panel, 50f, PTButtonStyle.Wax, 22f);
+                PTUIFactory.LabelOf(button).text = "Start a new run  [Esc]";
+                return button;
+            });
+            PTUIFactory.OnClick(restart, manager.RestartRun);
+        }
 
-            TextMeshProUGUI restartLabel;
-            PTUIFactory.CreateButton(panel, 50f, manager.RestartRun, out restartLabel, PTButtonStyle.Wax);
-            restartLabel.text = "Start a new run  [Esc]";
+        /// A label whose text comes from the finished run (or a preview while baking).
+        private TextMeshProUGUI Fill(string id, RectTransform panel, float size, TextAlignmentOptions alignment, Func<string> getText, string preview)
+        {
+            TextMeshProUGUI label = ui.Make(id, () => PTUIFactory.CreateLabel(id, panel, size, alignment));
+            if (ui.Baking) label.text = preview;
+            else label.text = getText();
+            return label;
         }
 
         private static string BuildTotals(PTManager manager)

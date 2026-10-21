@@ -60,7 +60,7 @@ public class PTAdventureLog : MonoBehaviour
         }
 
         logTextColor = PTUITheme.Ink;                                                           //ink on the parchment log strip (the colours below are inks too)
-        PTUIFactory.StyleLog(logScrollRect, logText);
+        ApplyTheme();
 
         if (useVerticalLayoutEntries && logText != null)                                        //use the verticallayoutentries option to create a template entry for visual log entries, and disable the original text component.
         {
@@ -73,6 +73,11 @@ public class PTAdventureLog : MonoBehaviour
     }
 
     //void Update(){}
+
+    public void ApplyTheme()                                                                //lays the log out as a parchment scroll (the editor's Bake UI also calls this on the HUD prefab)
+    {
+        PTUIFactory.StyleLog(logScrollRect, logText);
+    }
 #endregion
 
 #region Log Management Methods

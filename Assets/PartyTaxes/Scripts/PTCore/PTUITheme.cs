@@ -15,7 +15,14 @@ namespace PartyTaxes
     public static class PTUITheme
     {
         private const string ArtPath = "PartyTaxes/UI/";
-        private const string FontPath = "PartyTaxes/UI/Fonts/";
+
+        // ── Type scale (canvas units at the 1920x1080 reference) ───────
+        public const float SizeTitle    = 72f;                                                        // royal titles
+        public const float SizeHeading  = 30f;                                                        // page headers
+        public const float SizeSubhead  = 25f;                                                        // section headers, card headings
+        public const float SizeBody     = 21f;                                                        // everything you read
+        public const float SizeButton   = 20f;
+        public const float SizeSmall    = 17f;                                                        // hints and small print
 
         // ── Colours ───────────────────────────────────────────────────
         public static readonly Color Ink        = new Color(0.17f, 0.11f, 0.08f, 1f);
@@ -37,8 +44,8 @@ namespace PartyTaxes
         public static readonly Color BannerWar  = new Color(0.60f, 0.12f, 0.12f, 1f);
         public static readonly Color Twine      = new Color(0.40f, 0.30f, 0.20f, 0.9f);            // twine
         public static readonly Color BountyTint = new Color(0.86f, 0.70f, 0.60f, 1f);              // enemies' tags are wanted notices
-        public static readonly Color HealthInk  = new Color(0.62f, 0.13f, 0.12f, 0.9f);
-        public static readonly Color XpInk      = new Color(0.62f, 0.45f, 0.10f, 0.9f);
+        public static readonly Color HealthInk  = new Color(0.58f, 0.09f, 0.08f, 1f);
+        public static readonly Color XpInk      = new Color(0.66f, 0.47f, 0.08f, 1f);
 
         // Rich-text inks for <color=...> tags, dark enough to read on parchment
         public const string RedInk    = "#8E1B1B";                                                    // losses, theft, danger
@@ -85,18 +92,37 @@ namespace PartyTaxes
 
         private static Sprite LoadSprite(string name, float border) => LoadSprite(name, new Vector4(border, border, border, border));
 
+        /// The imported sprite asset (its 9-slice border comes from the .meta, and baked prefabs can reference it),
+        /// or, if the texture wasn't imported as a sprite, one made at runtime with the given border.
         private static Sprite LoadSprite(string name, Vector4 border)
         {
             Sprite sprite;
             if (sprites.TryGetValue(name, out sprite) && sprite != null) return sprite;
-            Texture2D texture = Resources.Load<Texture2D>(ArtPath + name);
-            sprite = texture == null ? null : Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f),
-                                                            100f, 0, SpriteMeshType.FullRect, border);
+            sprite = Resources.Load<Sprite>(ArtPath + name);
+            if (sprite == null)
+            {
+                Texture2D texture = Resources.Load<Texture2D>(ArtPath + name);
+                sprite = texture == null ? null : Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f),
+                                                                100f, 0, SpriteMeshType.FullRect, border);
+            }
             sprites[name] = sprite;
             return sprite;
         }
 
+        /// Forgets loaded sprites and fonts (the editor baker calls this after saving font assets).
+        public static void ClearCache()
+        {
+            sprites.Clear();
+            body = heading = title = null;
+        }
+
         // ── Fonts ─────────────────────────────────────────────────────
+        public const string FontPath = "PartyTaxes/UI/Fonts/";
+        public const string FontAssetSuffix = " SDF";                                                 // saved TMP font assets sit beside their TTFs
+        public const string BodyFont = "CrimsonText-Regular", BodyBoldFont = "CrimsonText-Bold", BodyItalicFont = "CrimsonText-Italic";
+        public const string HeadingFont = "IMFellEnglishSC-Regular", TitleFont = "PirataOne-Regular";
+        public static readonly string[] FontFiles = { BodyFont, BodyBoldFont, BodyItalicFont, HeadingFont, TitleFont };
+
         private static TMP_FontAsset body, heading, title;
 
         /// Crimson Text, with real bold and italic faces for <b> and <i>: everything you read.
@@ -104,33 +130,39 @@ namespace PartyTaxes
         {
             get
             {
-                if (body == null)
+                if (body != null) return body;
+                body = Resources.Load<TMP_FontAsset>(FontPath + BodyFont + FontAssetSuffix);         // baked asset: already has its bold and italic faces
+                if (body != null) return body;
+                body = CreateFont(BodyFont);
+                if (body != null && body.fontWeightTable != null && body.fontWeightTable.Length > 7)
                 {
-                    body = CreateFont("CrimsonText-Regular");
-                    if (body != null && body.fontWeightTable != null && body.fontWeightTable.Length > 7)
-                    {
-                        body.fontWeightTable[7].regularTypeface = CreateFont("CrimsonText-Bold");    // <b> uses the bold face, not faux bold
-                        body.fontWeightTable[4].italicTypeface = CreateFont("CrimsonText-Italic");
-                    }
+                    body.fontWeightTable[7].regularTypeface = CreateFont(BodyBoldFont);                // <b> uses the bold face, not faux bold
+                    body.fontWeightTable[4].italicTypeface = CreateFont(BodyItalicFont);
                 }
                 return body;
             }
         }
 
         /// IM Fell English SC: headers and HUD labels, like an old printed broadsheet.
-        public static TMP_FontAsset Heading => heading != null ? heading : (heading = CreateFont("IMFellEnglishSC-Regular"));
+        public static TMP_FontAsset Heading => heading != null ? heading : (heading = LoadFont(HeadingFont));
 
         /// Pirata One, a legible blackletter: royal titles only (big sizes).
-        public static TMP_FontAsset Title => title != null ? title : (title = CreateFont("PirataOne-Regular"));
+        public static TMP_FontAsset Title => title != null ? title : (title = LoadFont(TitleFont));
 
-        /// A dynamic SDF font asset made at runtime from a TTF in Resources (so no editor step is needed).
-        private static TMP_FontAsset CreateFont(string file)
+        private static TMP_FontAsset LoadFont(string file)
+        {
+            TMP_FontAsset saved = Resources.Load<TMP_FontAsset>(FontPath + file + FontAssetSuffix);
+            return saved != null ? saved : CreateFont(file);
+        }
+
+        /// A dynamic SDF font asset made from a TTF in Resources (at runtime, or by the editor baker to save as an asset).
+        public static TMP_FontAsset CreateFont(string file)
         {
             Font font = Resources.Load<Font>(FontPath + file);
             if (font == null) return null;
             TMP_FontAsset asset = TMP_FontAsset.CreateFontAsset(font);
             if (asset == null) return null;
-            asset.name = file;
+            asset.name = file + FontAssetSuffix;
             if (TMP_Settings.defaultFontAsset != null)
             {
                 asset.fallbackFontAssetTable = new List<TMP_FontAsset> { TMP_Settings.defaultFontAsset };   // symbols the old fonts lack (e.g. arrows)
